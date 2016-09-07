@@ -10,7 +10,7 @@ Library "Omap"
   Path:       ./lib
   BuildTools: ocamlbuild, ocamldoc
   Modules:    Types, Utils, Config, Manager, Worker, Context, Memory, Service, Dag
-  BuildDepends: str, unix, uint, ZMQ, ocamlgraph
+  BuildDepends: str, unix, uint, ZMQ, ocamlgraph, lwt, lwt.unix
 
 Executable manager
   Path:           ./lib
@@ -24,7 +24,7 @@ Executable worker
   BuildTools:     ocamlbuild
   CompiledObject: byte
   MainIs:         worker.ml
-  BuildDepends:   ZMQ
+  BuildDepends:   ZMQ, lwt, lwt.unix
 
 Executable test_wordcount
   Path:           ./test
