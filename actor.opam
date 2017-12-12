@@ -1,0 +1,27 @@
+opam-version: "1.2"
+maintainer: "Liang Wang (ryanrhymes@gmail.com)"
+authors: [ "Liang Wang (ryanrhymes@gmail.com)" ]
+license: "MIT"
+homepage: "https://github.com/ryanrhymes/actor"
+dev-repo: "git+https://github.com/ryanrhymes/actor.git"
+bug-reports: "https://github.com/ryanrhymes/actor/issues"
+doc: "http://www.cl.cam.ac.uk/~lw525/owl/"
+
+version: "dev"
+
+build: [
+  ["jbuilder" "subst" "-n" name] {pinned}
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
+
+depends: [
+  "ctypes"
+  "owl"
+  "str"
+  "unix"
+  "ZMQ"
+  "ocamlgraph"
+  "dolog" {>= "3.0"}
+  "jbuilder" {build}
+]
+available: [ ocaml-version >= "4.02.0" ]

@@ -1,0 +1,17 @@
+(jbuild_version 1)
+
+(library (
+  (name actor)
+  (public_name actor)
+  (wrapped false)
+  ;(flags (:standard -safe-string))
+  (libraries (
+    ctypes
+    owl
+    str
+    unix
+    ZMQ
+    ocamlgraph
+    dolog
+  ))
+))

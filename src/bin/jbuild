@@ -1,0 +1,21 @@
+(jbuild_version 1)
+
+(executables (
+  (names (
+    actor_manager
+    actor_worker
+  ))
+  (modes (native))
+  (libraries  (
+    actor
+  ))
+))
+
+(install (
+  (section bin)
+  (package actor)
+  (files (
+    (actor_manager.exe as actor_manager)
+    (actor_worker.exe as actor_worker)
+  ))
+))
