@@ -1,0 +1,21 @@
+(jbuild_version 1)
+
+(executables (
+  (names (
+    test_kmeans
+    test_wordcount
+  ))
+  (modes (native))
+  (libraries  (
+    actor
+  ))
+))
+
+(install (
+  (section bin)
+  (package actor)
+  (files (
+    (test_kmeans.exe as test_kmeans)
+    (test_wordcount.exe as test_wordcount)
+  ))
+))
