@@ -62,15 +62,15 @@ let process r m =
     )
 
 let run _id addr =
-  let _ztx = ZMQ.Context.create () in
-  let rep = ZMQ.Socket.create _ztx ZMQ.Socket.rep in
-  ZMQ.Socket.bind rep addr;
+  let _ztx = Actor_zmq_repl.context_create () in
+  let rep = Actor_zmq_repl.create _ztx Actor_zmq_repl.rep in
+  Actor_zmq_repl.bind rep addr;
   while true do
-    let m = of_msg (ZMQ.Socket.recv rep) in
+    let m = of_msg (Actor_zmq_repl.recv rep) in
     process rep m;
   done;
-  ZMQ.Socket.close rep;
-  ZMQ.Context.terminate _ztx
+  Actor_zmq_repl.close rep;
+  Actor_zmq_repl.context_terminate _ztx
 
 let install_app _x = None
 

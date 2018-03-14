@@ -12,7 +12,7 @@ let _push = ref (Marshal.to_string _default_push [ Marshal.Closures ])
 let _get k =
   let k' = Marshal.to_string k [] in
   Actor_utils.send ~bar:!_context.step !_context.master_sock PS_Get [|k'|];
-  let m = of_msg (ZMQ.Socket.recv ~block:true !_context.master_sock) in
+  let m = of_msg (Actor_zmq_repl.recv ~block:true !_context.master_sock) in
   Marshal.from_string m.par.(0) 0, m.bar
 
 let _set k v t =
@@ -50,17 +50,17 @@ let service_loop () =
     | _ -> ( Actor_logger.debug "unknown mssage to PS" )
   done with Failure e -> (
     Actor_logger.warn "%s" e;
-    ZMQ.Socket.close !_context.myself_sock;
+    Actor_zmq_repl.close !_context.myself_sock;
     Pervasives.exit 0 )
 
 let init m context =
   _context := context;
   !_context.master_addr <- m.par.(0);
   (* connect to job master *)
-  let master = ZMQ.Socket.create !_context.ztx ZMQ.Socket.dealer in
-  ZMQ.Socket.set_send_high_water_mark master Actor_config.high_warter_mark;
-  ZMQ.Socket.set_identity master !_context.myself_addr;
-  ZMQ.Socket.connect master !_context.master_addr;
+  let master = Actor_zmq_repl.create !_context.ztx Actor_zmq_repl.dealer in
+  Actor_zmq_repl.set_send_high_water_mark master Actor_config.high_warter_mark;
+  Actor_zmq_repl.set_identity master !_context.myself_addr;
+  Actor_zmq_repl.connect master !_context.master_addr;
   Actor_utils.send master OK [|!_context.myself_addr|];
   !_context.master_sock <- master;
   (* enter into worker service loop *)

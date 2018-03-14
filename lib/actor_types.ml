@@ -31,25 +31,25 @@ type message_rec = {
 }
 
 type mapre_context = {
-  mutable ztx         : ZMQ.Context.t;                    (* zmq context for communication *)
+  mutable ztx         : Actor_zmq_repl.context_t;                    (* zmq context for communication *)
   mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
   mutable master_addr : string;                           (* different meaning in different paradigm *)
   mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : [`Dealer] ZMQ.Socket.t;           (* socket of master_addr *)
-  mutable myself_sock : [`Router] ZMQ.Socket.t;           (* socket of myself_addr *)
-  mutable workers     : [`Dealer] ZMQ.Socket.t StrMap.t;  (* socket of workers or peers *)
+  mutable master_sock : Actor_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
+  mutable myself_sock : Actor_zmq_repl.socket_router_t;           (* socket of myself_addr *)
+  mutable workers     : Actor_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
   mutable step        : int;                              (* local step for barrier control *)
   mutable msbuf       : (int, string * message_rec) Hashtbl.t;  (* buffer of un-ordered messages *)
 }
 
 type param_context = {
-  mutable ztx         : ZMQ.Context.t;                    (* zmq context for communication *)
+  mutable ztx         : Actor_zmq_repl.context_t;                    (* zmq context for communication *)
   mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
   mutable master_addr : string;                           (* different meaning in different paradigm *)
   mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : [`Dealer] ZMQ.Socket.t;           (* socket of master_addr *)
-  mutable myself_sock : [`Router] ZMQ.Socket.t;           (* socket of myself_addr *)
-  mutable workers     : [`Dealer] ZMQ.Socket.t StrMap.t;  (* socket of workers or peers *)
+  mutable master_sock : Actor_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
+  mutable myself_sock : Actor_zmq_repl.socket_router_t;           (* socket of myself_addr *)
+  mutable workers     : Actor_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
   mutable step        : int;                              (* local step for barrier control *)
   mutable stale       : int;                              (* staleness variable for barrier control *)
   mutable worker_busy : (string, int) Hashtbl.t;          (* lookup table of a worker busy or not *)
@@ -58,13 +58,13 @@ type param_context = {
 }
 
 type peer_context = {
-  mutable ztx         : ZMQ.Context.t;                    (* zmq context for communication *)
+  mutable ztx         : Actor_zmq_repl.context_t;                    (* zmq context for communication *)
   mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
   mutable master_addr : string;                           (* different meaning in different paradigm *)
   mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : [`Dealer] ZMQ.Socket.t;           (* socket of master_addr *)
-  mutable myself_sock : [`Router] ZMQ.Socket.t;           (* socket of myself_addr *)
-  mutable workers     : [`Dealer] ZMQ.Socket.t StrMap.t;  (* socket of workers or peers *)
+  mutable master_sock : Actor_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
+  mutable myself_sock : Actor_zmq_repl.socket_router_t;           (* socket of myself_addr *)
+  mutable workers     : Actor_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
   mutable step        : int;                              (* local step for barrier control *)
   mutable block       : bool;                             (* is client blocked at barrier *)
   mutable mpbuf       : Obj.t list;                       (* buffer of model parameter updates *)

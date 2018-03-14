@@ -3,23 +3,23 @@
 open Actor_types
 
 let recv s =
-  let m = ZMQ.Socket.recv_all ~block:true s in
+  let m = Actor_zmq_repl.recv_all ~block:true s in
   (List.nth m 0, List.nth m 1 |> of_msg)
 
 let send ?(bar=0) v t s =
-  try ZMQ.Socket.send ~block:false v (to_msg bar t s)
-  with _exn -> let hwm = ZMQ.Socket.get_send_high_water_mark v in
+  try Actor_zmq_repl.send ~block:false v (to_msg bar t s)
+  with _exn -> let hwm = Actor_zmq_repl.get_send_high_water_mark v in
   Actor_logger.error "fail to send bar:%i hwm:%i" bar hwm
 
 let rec _bind_available_addr addr sock ztx =
   addr := "tcp://127.0.0.1:" ^ (string_of_int (Random.int 10000 + 50000));
-  try ZMQ.Socket.bind sock !addr
+  try Actor_zmq_repl.bind sock !addr
   with _exn -> _bind_available_addr addr sock ztx
 
 let bind_available_addr ztx =
-  let router : [`Router] ZMQ.Socket.t = ZMQ.Socket.create ztx ZMQ.Socket.router in
+  let router : Actor_zmq_repl.socket_router_t = Actor_zmq_repl.create ztx Actor_zmq_repl.router in
   let addr = ref "" in _bind_available_addr addr router ztx;
-  ZMQ.Socket.set_receive_high_water_mark router Actor_config.high_warter_mark;
+  Actor_zmq_repl.set_receive_high_water_mark router Actor_config.high_warter_mark;
   !addr, router
 
 (* the following 3 functions are for shuffle operations *)
@@ -50,28 +50,28 @@ let addr_to_log x =
   List.nth path 1 |> Str.(global_replace (regexp "[:.]") "_")
 
 let empty_mapre_context () =
-  let ztx = ZMQ.Context.create () in
+  let ztx = Actor_zmq_repl.context_create () in
   {
     ztx         = ztx;
     job_id      = "";
     master_addr = "";
     myself_addr = "";
-    master_sock = ZMQ.Socket.(create ztx dealer);
-    myself_sock = ZMQ.Socket.(create ztx router);
+    master_sock = Actor_zmq_repl.(create ztx dealer);
+    myself_sock = Actor_zmq_repl.(create ztx router);
     workers     = StrMap.empty;
     step        = 0;
     msbuf       = Hashtbl.create 256;
   }
 
 let empty_param_context () =
-  let ztx = ZMQ.Context.create () in
+  let ztx = Actor_zmq_repl.context_create () in
   {
     ztx         = ztx;
     job_id      = "";
     master_addr = "";
     myself_addr = "";
-    master_sock = ZMQ.Socket.(create ztx dealer);
-    myself_sock = ZMQ.Socket.(create ztx router);
+    master_sock = Actor_zmq_repl.(create ztx dealer);
+    myself_sock = Actor_zmq_repl.(create ztx router);
     workers     = StrMap.empty;
     step        = 0;
     stale       = 1;
@@ -81,14 +81,14 @@ let empty_param_context () =
   }
 
 let empty_peer_context () =
-  let ztx = ZMQ.Context.create () in
+  let ztx = Actor_zmq_repl.context_create () in
   {
     ztx         = ztx;
     job_id      = "";
     master_addr = "";
     myself_addr = "";
-    master_sock = ZMQ.Socket.(create ztx dealer);
-    myself_sock = ZMQ.Socket.(create ztx router);
+    master_sock = Actor_zmq_repl.(create ztx dealer);
+    myself_sock = Actor_zmq_repl.(create ztx router);
     workers     = StrMap.empty;
     step        = 0;
     block       = false;

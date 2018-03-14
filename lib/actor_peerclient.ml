@@ -63,22 +63,22 @@ let service_loop () =
     |> _barrier
   done with Failure e -> (
     Actor_logger.warn "%s" e;
-    ZMQ.Socket.close !_context.myself_sock;
+    Actor_zmq_repl.close !_context.myself_sock;
     Pervasives.exit 0 )
 
 let init _m context =
   _context := context;
   (* re-initialise since it is a new process *)
-  !_context.ztx <- ZMQ.Context.create ();
+  !_context.ztx <- Actor_zmq_repl.context_create ();
   !_context.master_addr <- context.myself_addr;
   let _addr, _router = Actor_utils.bind_available_addr !_context.ztx in
   !_context.myself_addr <- _addr;
   !_context.myself_sock <- _router;
   (* set up local p2p server <-> client *)
-  let sock = ZMQ.Socket.create !_context.ztx ZMQ.Socket.dealer in
-  ZMQ.Socket.set_send_high_water_mark sock Actor_config.high_warter_mark;
-  ZMQ.Socket.set_identity sock !_context.myself_addr;
-  ZMQ.Socket.connect sock !_context.master_addr;
+  let sock = Actor_zmq_repl.create !_context.ztx Actor_zmq_repl.dealer in
+  Actor_zmq_repl.set_send_high_water_mark sock Actor_config.high_warter_mark;
+  Actor_zmq_repl.set_identity sock !_context.myself_addr;
+  Actor_zmq_repl.connect sock !_context.master_addr;
   !_context.master_sock <- sock;
   Actor_utils.send !_context.master_sock P2P_Connect [|!_context.myself_addr|];
   (* enter into client service loop *)
