@@ -2,10 +2,17 @@
 
 open Actor_types
 
+(* Used in lib/actor_paramclient *)
+(* Used in lib/actor_paramserver *)
 let recv s =
   let m = Actor_zmq_repl.recv_all ~block:true s in
   (List.nth m 0, List.nth m 1 |> of_msg)
 
+(* Used in src/actor_manager *)
+(* Used in src/actor_worker *)
+(* Used in lib/actor_param *)
+(* Used in lib/actor_paramclient *)
+(* Used in lib/actor_paramserver *)
 let send ?(bar=0) v t s =
   try Actor_zmq_repl.send ~block:false v (to_msg bar t s)
   with _exn -> let hwm = Actor_zmq_repl.get_send_high_water_mark v in
@@ -16,6 +23,7 @@ let rec _bind_available_addr addr sock ztx =
   try Actor_zmq_repl.bind sock !addr
   with _exn -> _bind_available_addr addr sock ztx
 
+(* Used in lib/actor_param *)
 let bind_available_addr ztx =
   let router : Actor_zmq_repl.socket_router_t = Actor_zmq_repl.create ztx Actor_zmq_repl.router in
   let addr = ref "" in _bind_available_addr addr router ztx;
@@ -63,6 +71,9 @@ let empty_mapre_context () =
     msbuf       = Hashtbl.create 256;
   }
 
+(* Used in lib/actor_param *)
+(* Used in lib/actor_paramclient *)
+(* Used in lib/actor_paramserver *)
 let empty_param_context () =
   let ztx = Actor_zmq_repl.context_create () in
   {
