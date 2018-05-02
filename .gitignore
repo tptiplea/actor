@@ -22,3 +22,9 @@ setup.log
 # jbuilder generated files
 .merlin
 *.install
+
+# node modules
+*node_modules/
+
+# ide stuff
+*.idea/
