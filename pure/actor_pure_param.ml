@@ -32,7 +32,7 @@ let start ?barrier jid url =
   let _ = match m.typ with
     | Job_Master -> Actor_pure_paramserver.init m _context
     | Job_Worker -> Actor_pure_paramclient.init m _context
-    | _ -> Printf.fprintf Pervasives.stdout "%s" "unknown command";
+    | _ -> Printf.fprintf Pervasives.stdout "%s\n" "unknown command"; Pervasives.flush Pervasives.stdout;
   in
   Actor_pure_zmq_repl.close req
 

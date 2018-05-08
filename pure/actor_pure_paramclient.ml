@@ -26,7 +26,7 @@ let update_param x t =
   Actor_pure_utils.send ~bar:t !_context.master_sock PS_Push [|x'|]
 
 let service_loop () =
-  Printf.fprintf Pervasives.stderr "parameter worker @ %s" !_context.myself_addr;
+  Printf.fprintf Pervasives.stderr "parameter worker @ %s\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
   (* unmarshal the push function *)
   let push : 'a -> ('b * 'c) list -> ('b * 'c) list = Marshal.from_string !_push 0 in
   (* loop to process messages *)
@@ -35,21 +35,21 @@ let service_loop () =
     let t = m.bar in
     match m.typ with
     | PS_Schedule -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_schedule" !_context.myself_addr;
+      Printf.fprintf Pervasives.stderr "%s: ps_schedule\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       !_context.step <- (if t > !_context.step then t else !_context.step);
       let vars = Marshal.from_string m.par.(0) 0 in
       let updates = push !_context.myself_addr vars in
       update_param updates t
       )
     | Terminate -> (
-      Printf.fprintf Pervasives.stderr "%s: terminate"!_context.myself_addr;
+      Printf.fprintf Pervasives.stderr "%s: terminate\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       Actor_pure_utils.send ~bar:t !_context.master_sock OK [||];
       Unix.sleep 1; (* FIXME: sleep ... *)
       failwith ("#" ^ !_context.job_id ^ " terminated")
       )
-    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS" )
+    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
   done with Failure e -> (
-    Printf.fprintf Pervasives.stderr "%s" e;
+    Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
     Actor_pure_zmq_repl.close !_context.myself_sock;
     Pervasives.exit 0 )
 

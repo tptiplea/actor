@@ -16,8 +16,7 @@ let recv s =
 let send ?(bar=0) v t s =
   try Actor_pure_zmq_repl.send ~block:false v (to_msg bar t s)
   with _exn -> let hwm = Actor_pure_zmq_repl.get_send_high_water_mark v in
-  Printf.fprintf Pervasives.stderr "fail to send bar:%i hwm:%i" bar hwm
-  (* Printf.fprintf Pervasives.stderr "fail to send bar:%i hwm:%i" bar hwm *)
+  Printf.fprintf Pervasives.stderr "fail to send bar:%i hwm:%i\n" bar hwm; Pervasives.flush Pervasives.stderr
 
 let rec _bind_available_addr addr sock ztx =
   addr := "tcp://127.0.0.1:" ^ (string_of_int (Random.int 10000 + 50000));
@@ -53,10 +52,7 @@ let flatten_kvg x =
 
 let choose_load x n i = List.filter (fun (k,_l) -> (Hashtbl.hash k mod n) = i) x
 
-(* generate a log file name from address *)
-let addr_to_log x =
-  let path = Str.(split (regexp "://")) x in
-  List.nth path 1 |> Str.(global_replace (regexp "[:.]") "_")
+
 
 let empty_mapre_context () =
   let ztx = Actor_pure_zmq_repl.context_create () in

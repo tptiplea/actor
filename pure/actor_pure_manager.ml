@@ -28,7 +28,7 @@ let process r m =
   | User_Reg -> (
     let uid, addr = m.par.(0), m.par.(1) in
     if Workers.mem uid = false then
-      Printf.fprintf Pervasives.stdout "%s" (uid ^ " @ " ^ addr);
+      Printf.fprintf Pervasives.stdout "%s\n" (uid ^ " @ " ^ addr); Pervasives.flush Pervasives.stdout;
       Workers.add uid addr;
       Actor_pure_utils.send r OK [||];
     )
@@ -44,13 +44,13 @@ let process r m =
       Actor_pure_utils.send r Job_Worker [|master|]
     )
   | Heartbeat -> (
-    Printf.fprintf Pervasives.stdout "%s" ("heartbeat @ " ^ m.par.(0));
+    Printf.fprintf Pervasives.stdout "%s\n" ("heartbeat @ " ^ m.par.(0)); Pervasives.flush Pervasives.stdout;
     Workers.add m.par.(0) m.par.(1);
     Actor_pure_utils.send r OK [||];
     )
   | P2P_Reg -> (
     let addr, jid = m.par.(0), m.par.(1) in
-    Printf.fprintf Pervasives.stdout "p2p @ %s job:%s" addr jid;
+    Printf.fprintf Pervasives.stdout "p2p @ %s job:%s\n" addr jid; Pervasives.flush Pervasives.stdout;
     if Actor_pure_service.mem jid = false then Actor_pure_service.add jid "";
     let peers = Actor_pure_service.choose_workers jid 10 in
     let peers = Marshal.to_string peers [] in
@@ -58,7 +58,7 @@ let process r m =
     Actor_pure_utils.send r OK [|peers|];
     )
   | _ -> (
-    Printf.fprintf Pervasives.stderr "unknown message type"
+    Printf.fprintf Pervasives.stderr "unknown message type\n";  Pervasives.flush Pervasives.stderr
     )
 
 let run _id addr =

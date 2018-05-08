@@ -33,7 +33,7 @@ let mapre_dbp bar _context =
     if bar = m.bar && not (Hashtbl.mem h i) then Hashtbl.add h i m;
     if budget < (Unix.gettimeofday () -. t0) then failwith "timeout"
   done
-  with _exn -> Printf.fprintf Pervasives.stderr "%s" "timeout +++");
+  with _exn -> Printf.fprintf Pervasives.stderr "%s\n" "timeout +++"; Pervasives.flush Pervasives.stderr);
   Hashtbl.fold (fun _k v l -> v :: l) h []
 
 (* Param barrier: Bulk synchronous parallel *)

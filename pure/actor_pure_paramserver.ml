@@ -52,7 +52,7 @@ let terminate () =
   Unix.sleep 1 (** FIXME: change to BSP *)
 
 let service_loop () =
-  Printf.fprintf Pervasives.stderr "parameter server @ %s" !_context.myself_addr;
+  Printf.fprintf Pervasives.stderr "parameter server @ %s\n" !_context.myself_addr;  Pervasives.flush Pervasives.stderr;
   (* unmarshal the schedule and pull functions *)
   let schedule : ('a, 'b, 'c) ps_schedule_typ = Marshal.from_string !_schedule 0 in
   let pull : ('a, 'b, 'c) ps_pull_typ = Marshal.from_string !_pull 0 in
@@ -72,33 +72,33 @@ let service_loop () =
       Actor_pure_utils.send ~bar:t w PS_Schedule [|s|]
     ) tasks;
     if List.length tasks > 0 then
-      Printf.fprintf Pervasives.stderr "schedule t:%i -> %i workers" !_context.step (List.length tasks);
+      Printf.fprintf Pervasives.stderr "schedule t:%i -> %i workers\n" !_context.step (List.length tasks); Pervasives.flush Pervasives.stderr;
     (** wait for another message arrival *)
     let i, m = Actor_pure_utils.recv !_context.myself_sock in
     let t = m.bar in
     match m.typ with
     | PS_Get -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_get" !_context.myself_addr;
+      Printf.fprintf Pervasives.stderr "%s: ps_get\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       let k = Marshal.from_string m.par.(0) 0 in
       let v, t' = _get k in
       let s = to_msg t' OK [| Marshal.to_string v [] |] in
       Actor_pure_zmq_repl.send_all ~block:false !_context.myself_sock [i;s]
       )
     | PS_Set -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_set" !_context.myself_addr;
+      Printf.fprintf Pervasives.stderr "%s: ps_set\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       let k = Marshal.from_string m.par.(0) 0 in
       let v = Marshal.from_string m.par.(1) 0 in
       _set k v t
       )
     | PS_Push -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_push" !_context.myself_addr;
+      Printf.fprintf Pervasives.stderr "%s: ps_push\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       let updates = Marshal.from_string m.par.(0) 0 |> pull in
       List.iter (fun (k,v) -> _set k v t) updates;
       update_steps t i
       )
-    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS" )
+    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
   done with Failure e -> (
-    Printf.fprintf Pervasives.stderr "%s" e;
+    Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
     terminate ();
     Actor_pure_zmq_repl.close !_context.myself_sock )
 

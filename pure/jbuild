@@ -6,6 +6,12 @@
 
   (wrapped false)
 
+  (modules
+   (:standard \
+    (actor_pure_worker
+     actor_pure_manager
+  )))
+
   (flags (
     ; turn off some warnings as 4.06.0 is pernickety and errors out
     :standard -w "-50" -safe-string)
@@ -16,3 +22,13 @@
     zmq
    )
 )))
+
+(executables
+ ((public_names (actor_pure_manager actor_pure_worker))
+  (names        (actor_pure_manager actor_pure_worker))
+  (package actor_pure)
+
+  (modules (actor_pure_manager actor_pure_worker))
+  (libraries (
+    actor_pure
+))))
