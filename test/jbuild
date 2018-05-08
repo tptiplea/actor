@@ -3,6 +3,7 @@
 (executables
  ((public_names (test_wordcount test_kmeans test_owl_parallel))
   (names        (test_wordcount test_kmeans test_owl_parallel))
+  (package actor)
   (libraries (
     actor
     owl

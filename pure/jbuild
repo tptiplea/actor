@@ -1,0 +1,18 @@
+(jbuild_version 1)
+
+(library
+ ((public_name actor_pure)
+  (name        actor_pure)
+
+  (wrapped false)
+
+  (flags (
+    ; turn off some warnings as 4.06.0 is pernickety and errors out
+    :standard -w "-50" -safe-string)
+  )
+
+  (libraries (
+    owl_base
+    zmq
+   )
+)))
