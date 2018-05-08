@@ -10,6 +10,7 @@
    (:standard \
     (actor_pure_worker
      actor_pure_manager
+     test_pure_parameter
   )))
 
   (flags (
@@ -24,11 +25,11 @@
 )))
 
 (executables
- ((public_names (actor_pure_manager actor_pure_worker))
-  (names        (actor_pure_manager actor_pure_worker))
+ ((public_names (actor_pure_manager actor_pure_worker test_pure_parameter))
+  (names        (actor_pure_manager actor_pure_worker test_pure_parameter))
   (package actor_pure)
 
-  (modules (actor_pure_manager actor_pure_worker))
+  (modules (actor_pure_manager actor_pure_worker test_pure_parameter))
   (libraries (
     actor_pure
 ))))

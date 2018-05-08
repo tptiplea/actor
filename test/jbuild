@@ -1,8 +1,8 @@
 (jbuild_version 1)
 
 (executables
- ((public_names (test_wordcount test_kmeans test_owl_parallel))
-  (names        (test_wordcount test_kmeans test_owl_parallel))
+ ((public_names (test_wordcount test_kmeans test_owl_parallel test_parameter))
+  (names        (test_wordcount test_kmeans test_owl_parallel test_parameter))
   (package actor)
   (libraries (
     actor
