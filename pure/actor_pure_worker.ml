@@ -51,7 +51,7 @@ let run id u_addr m_addr =
       | _ -> ()
     with
       | Unix.Unix_error (_,_,_) -> heartbeat req id u_addr m_addr
-      | ZMQ.ZMQ_exception (_,s) -> (Printf.fprintf Pervasives.stderr "%s\n" s; Pervasives.flush Pervasives.stderr)
+      | Zmq.ZMQ_exception (_,s) -> (Printf.fprintf Pervasives.stderr "%s\n" s; Pervasives.flush Pervasives.stderr)
       | _exn -> (Printf.fprintf Pervasives.stderr "unknown error\n"; Pervasives.flush Pervasives.stderr)
   done;
   Actor_pure_zmq_repl.close rep;
