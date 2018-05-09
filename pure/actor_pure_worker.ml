@@ -20,6 +20,7 @@ let heartbeat req id u_addr m_addr =
   ignore (Actor_pure_zmq_repl.recv req)
 
 let start_app app arg =
+  print_string "app: "; print_string app; print_string "\n\n"; Pervasives.flush_all();
   Printf.fprintf Pervasives.stdout "%s\n" ("starting job " ^ app); Pervasives.flush Pervasives.stdout;
   match Unix.fork () with
   | 0 -> if Unix.fork () = 0 then Unix.execv app arg else exit 0

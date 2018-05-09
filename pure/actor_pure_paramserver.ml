@@ -109,7 +109,7 @@ let init m context =
   List.map (fun x ->
     let req = Actor_pure_zmq_repl.create !_context.ztx Actor_pure_zmq_repl.req in
     Actor_pure_zmq_repl.connect req x;
-    let app = Filename.basename Sys.argv.(0) in
+    let app = Filename.basename Sys.argv.(0) in (* TODO: if we get JS code, get this *)
     let arg = Marshal.to_string Sys.argv [] in
     Actor_pure_utils.send req Job_Create [|!_context.myself_addr; app; arg|]; req
   ) addrs
