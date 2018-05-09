@@ -100,7 +100,7 @@ let test_neural_parallel () =
     |> max_pool2d [|2;2|] [|2;2|] ~padding:VALID
     |> dropout 0.1
     |> fully_connected 512 ~act_typ:Activation.Relu
-    |> linear 10 ~act_typ:Activation.Softmax
+    |> linear 10 ~act_typ:(Activation.Softmax 1)
     |> get_network
   in
 
@@ -152,4 +152,4 @@ let test_owl_distributed () =
   Actor_logger.info "sum x = %g" (Owl.Arr.sum' x)
 
 
-let _ = test_neural_parallel ()
+let _ = Printexc.record_backtrace true; test_neural_parallel ()
