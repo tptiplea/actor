@@ -13,100 +13,100 @@ console.log('Listening on port:', 3000);
 
 // When a new socket is created, register its possible handshakes.
 io.on('connection', function (iosocket) {
-    iosocket.on('register_zmqsocket', function (data) {
-        register_zmqsocket(iosocket, data);
+    iosocket.on('register_unixsocket', function (data) {
+        register_unixsocket(iosocket, data);
     });
-    iosocket.on('unregister_zmqsocket', function (data) {
-        unregister_zmqsocket(socket, data);
+    iosocket.on('unregister_unixsocket', function (data) {
+        unregister_unixsocket(socket, data);
     });
-    iosocket.on('contact_zmqsocket', function (data) {
-        contact_zmqsocket(socket, data);
+    iosocket.on('contact_unixsocket', function (data) {
+        contact_unixsocket(socket, data);
     });
 
     iosocket.emit('connected_to_server', 'ok');
 });
 
 
-var zmqsocket_to_iosocket = {};
-var iosocket_to_zmqsockets = {};
+var unixsocket_to_iosocket = {};
+var iosocket_to_unixsockets = {};
 
-// Requests to contact a zmqsocket that are yet to be satisfied.
-var waitlist_for_zmqsocket = {};
+// Requests to contact a unixsocket that are yet to be satisfied.
+var waitlist_for_unixsocket = {};
 
-// Register the zmqsocket id.
-function register_zmqsocket(iosocket, data) {
-    var zmqsocket_id = data.zmqsocket_id;
+// Register the unixsocket id.
+function register_unixsocket(iosocket, data) {
+    var unixsocket_id = data.unixsocket_id;
 
     // Update the first map.
-    zmqsocket_to_iosocket[zmqsocket_id] = iosocket;
+    unixsocket_to_iosocket[unixsocket_id] = iosocket;
 
     // Update the second map.
-    if (iosocket.id in iosocket_to_zmqsockets)
-        iosocket_to_zmqsockets[iosocket.id].push(zmqsocket_id);
+    if (iosocket.id in iosocket_to_unixsockets)
+        iosocket_to_unixsockets[iosocket.id].push(unixsocket_id);
     else
-        iosocket_to_zmqsockets[iosocket.id] = [zmqsocket_id];
+        iosocket_to_unixsockets[iosocket.id] = [unixsocket_id];
 
-    if (zmqsocket_id in waitlist_for_zmqsocket) {
-        var queue = waitlist_for_zmqsocket[zmqsocket_id];
+    if (unixsocket_id in waitlist_for_unixsocket) {
+        var queue = waitlist_for_unixsocket[unixsocket_id];
         var len = queue.length;
-        waitlist_for_zmqsocket[zmqsocket_id] = [];
+        waitlist_for_unixsocket[unixsocket_id] = [];
 
         for (var i = 0; i < len; i++) {
             var from_iosocket = queue[i].from_iosocket;
             var data = queue[i].data;
-            send_message_to_zmqsocket(from_iosocket, zmqsocket_id, data);
+            send_message_to_unixsocket(from_iosocket, unixsocket_id, data);
         }
     }
 }
 
-// Unregister the zmqsocket id.
-function unregister_zmqsocket(iosocket, data) {
-    var zmqsocket_id = data.zmqsocket_id;
+// Unregister the unixsocket id.
+function unregister_unixsocket(iosocket, data) {
+    var unixsocket_id = data.unixsocket_id;
 
-    // Remove the zmqsocket from both maps, if it's there.
-    if (zmqsocket_id in zmqsocket_to_iosocket) {
-        delete zmqsocket_to_iosocket[zmqsocket_id];
+    // Remove the unixsocket from both maps, if it's there.
+    if (unixsocket_id in unixsocket_to_iosocket) {
+        delete unixsocket_to_iosocket[unixsocket_id];
 
-        if (iosocket.id in iosocket_to_zmqsockets) {
-            var index_of_zmq = iosocket_to_zmqsockets[iosocket.id].indexOf(zmqsocket_id);
-            if (index_of_zmq > -1)
-                iosocket_to_zmqsockets[iosocket.id].splice(index_of_zmq, 1);
+        if (iosocket.id in iosocket_to_unixsockets) {
+            var index_of_unix = iosocket_to_unixsockets[iosocket.id].indexOf(unixsocket_id);
+            if (index_of_unix > -1)
+                iosocket_to_unixsockets[iosocket.id].splice(index_of_unix, 1);
         }
     } else {
         // Otherwise, an error.
-        var error_msg = 'Error - unregister_zmqsocket: Zmqsocket ' + zmqsocket_id + ' not registered with server.';
-        iosocket.emit('fail_unregister_zmqsocket', {error_msg: error_msg, zmqsocket_id: zmqsocket_id});
+        var error_msg = 'Error - unregister_unixsocket: unixsocket ' + unixsocket_id + ' not registered with server.';
+        iosocket.emit('fail_unregister_unixsocket', {error_msg: error_msg, unixsocket_id: unixsocket_id});
         console.log(error_msg);
     }
 }
 
-// When the zmqsocket is present.
-function send_message_to_zmqsocket(from_iosocket, to_zmqsocket_id, data) {
-    var to_iosocket = zmqsocket_to_iosocket[to_zmqsocket_id];
+// When the unixsocket is present.
+function send_message_to_unixsocket(from_iosocket, to_unixsocket_id, data) {
+    var to_iosocket = unixsocket_to_iosocket[to_unixsocket_id];
 
-    to_iosocket.emit('from_zmqsocket', data);
-    from_iosocket.emit('ok_contact_zmqsocket', {to_zmqsocket_id: to_zmqsocket_id, msg_id: data.msg_id});
+    to_iosocket.emit('from_unixsocket', data);
+    from_iosocket.emit('ok_contact_unixsocket', {to_unixsocket_id: to_unixsocket_id, msg_id: data.msg_id});
 }
 
-// Send a message to another zmqsocket.
-function contact_zmqsocket(iosocket, data) {
-    var to_zmqsocket_id = data.to_zmqsocket_id;
+// Send a message to another unixsocket.
+function contact_unixsocket(iosocket, data) {
+    var to_unixsocket_id = data.to_unixsocket_id;
 
-    if (to_zmqsocket_id in zmqsocket_to_iosocket) {
-        send_message_to_zmqsocket(iosocket, to_zmqsocket_id, data);
+    if (to_unixsocket_id in unixsocket_to_iosocket) {
+        send_message_to_unixsocket(iosocket, to_unixsocket_id, data);
     } else {
-        var error_msg = 'Error - contact_zmqsocket: Zmqsocket ' + to_zmqsocket_id + ' not registered with server.';
-        iosocket.emit('fail_contact_zmqsocket', {error_msg: error_msg, to_zmqsocket_id: to_zmqsocket_id});
+        var error_msg = 'Error - contact_unixsocket: unixsocket ' + to_unixsocket_id + ' not registered with server.';
+        iosocket.emit('fail_contact_unixsocket', {error_msg: error_msg, to_unixsocket_id: to_unixsocket_id});
         console.log(error_msg);
 
-        if ('discard_on_fail' in data) {
-            // Simply discard this message if no such zmqsocket exists.
-        } else {
-            // otherwise, send it when the zmqsocket registers.
-            if (to_zmqsocket_id in waitlist_for_zmqsocket)
-                waitlist_for_zmqsocket[to_zmqsocket_id].push({data: data, from_iosocket: iosocket});
+        if (('server_discard_on_fail' in data) && (data['server_discard_on_fail'] === true)) {
+            // otherwise, send it when the unixsocket registers.
+            if (to_unixsocket_id in waitlist_for_unixsocket)
+                waitlist_for_unixsocket[to_unixsocket_id].push({data: data, from_iosocket: iosocket});
             else
-                waitlist_for_zmqsocket[to_zmqsocket_id] = [{data: data, from_iosocket: iosocket}];
+                waitlist_for_unixsocket[to_unixsocket_id] = [{data: data, from_iosocket: iosocket}];
+        } else {
+            // Simply discard this message if no such unixsocket exists.
         }
     }
 }
