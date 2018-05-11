@@ -5,7 +5,7 @@ open Actor_pure_types
 (* Used in lib/actor_paramclient *)
 (* Used in lib/actor_paramserver *)
 let recv s =
-  let m = Actor_pure_zmq_repl.recv_all ~block:true s in
+  let m = Actor_pure_zmq_repl.recv_all s in
   (List.nth m 0, List.nth m 1 |> of_msg)
 
 (* Used in src/actor_manager *)

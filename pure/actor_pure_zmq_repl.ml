@@ -28,7 +28,8 @@ let router = Zmq.Socket.router
 
 (* Used in lib/actor_paramclient *) (* through utils *)
 (* Used in lib/actor_paramserver *) (* through utils *)
-let recv_all ?(block=true) s = Zmq.Socket.recv_all ~block s
+(* Always blocking *)
+let recv_all s = Zmq.Socket.recv_all ~block:true s
 (* val recv_all : ?block:bool -> 'a t -> string list *)
 (* these are multipart messages *)
 
@@ -72,7 +73,8 @@ let connect req url = Zmq.Socket.connect req url
 (* Used in src/actor_manager *)
 (* Used in lib/actor_param *)
 (* Used in lib/actor_paramclient *)
-let recv ?(block=true) req = Zmq.Socket.recv ~block req
+(* Always blocking *)
+let recv req = Zmq.Socket.recv ~block:true req
 (* val recv : ?block:bool -> 'a t -> string *)
 
 (* Used in src/actor_worker *)

@@ -12,7 +12,7 @@ let _push = ref (Marshal.to_string _default_push [ Marshal.Closures ])
 let _get k =
   let k' = Marshal.to_string k [] in
   Actor_pure_utils.send ~bar:!_context.step !_context.master_sock PS_Get [|k'|];
-  let m = of_msg (Actor_pure_zmq_repl.recv ~block:true !_context.master_sock) in
+  let m = of_msg (Actor_pure_zmq_repl.recv !_context.master_sock) in
   Marshal.from_string m.par.(0) 0, m.bar
 
 let _set k v t =
