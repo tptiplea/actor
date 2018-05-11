@@ -1,14 +1,15 @@
 var app = require('http').createServer(handler);
 var io = require('socket.io')(app);
+const port = 3000;
 
-app.listen(3000);
+app.listen(port);
 
 function handler(req, res) {
   res.writeHead(200);
   res.end("<!doctype html><html><head><title>ss</title></head><body></body></html>");
 }
 
-console.log('Listening on port:', 3000);
+console.log('Listening on port:', port);
 
 
 // When a new socket is created, register its possible handshakes.
@@ -37,6 +38,11 @@ var waitlist_for_unixsocket = {};
 function register_unixsocket(iosocket, data) {
     var unixsocket_id = data.unixsocket_id;
 
+    if (unixsocket_id in unixsocket_to_iosocket) {
+        iosocket.emit('fail_register_unixsocket', {error_msg: 'The socket with id ' + unixsocket_id + ' already registered '});
+        return;
+    }
+
     // Update the first map.
     unixsocket_to_iosocket[unixsocket_id] = iosocket;
 
@@ -57,6 +63,8 @@ function register_unixsocket(iosocket, data) {
             send_message_to_unixsocket(from_iosocket, unixsocket_id, data);
         }
     }
+
+    iosocket.emit('ok_register_unixsocket', {'unixsocket_id': unixsocket_id});
 }
 
 // Unregister the unixsocket id.
