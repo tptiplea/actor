@@ -2,19 +2,27 @@
 
 open Actor_pure_types
 
+module Internal(KeyValueTypeSpecifier : KeyValueTypeSig) = struct
+  type key_t = KeyValueTypeSpecifier.key_t
+  type value_t = KeyValueTypeSpecifier.value_t
+  type vars_t = (key_t * value_t) list
+
+  module MyClient = Actor_pure_paramclient.Internal(KeyValueTypeSpecifier)
+  module MyServer = Actor_pure_paramserver.Internal(KeyValueTypeSpecifier)
+
 type param_context = Actor_pure_types.param_context
 type barrier = ASP | BSP | SSP | PSP
 
 let start ?barrier jid url =
   (* reset the barrier control if specifed *)
   let _barrier_str = match barrier with
-    | Some ASP -> Marshal.to_string Actor_pure_barrier.param_asp [ Marshal.Closures ]
-    | Some BSP -> Marshal.to_string Actor_pure_barrier.param_bsp [ Marshal.Closures ]
-    | Some SSP -> Marshal.to_string Actor_pure_barrier.param_ssp [ Marshal.Closures ]
+    | Some ASP -> Actor_pure_barrier.param_asp
+    | Some BSP -> Actor_pure_barrier.param_bsp
+    | Some SSP -> Actor_pure_barrier.param_ssp
     | Some PSP -> failwith "Actor_pure_param:start:psp"
-    | None     -> Actor_pure_paramserver.(!_barrier)
+    | None     -> MyServer.(!_barrier)
   in
-  Actor_pure_paramserver._barrier := _barrier_str;
+  MyServer.update_barrier_fun _barrier_str;
   (* start preparing communication context *)
   let _ztx = Actor_pure_zmq_repl.context_create () in
   let%lwt _addr, _router = Actor_pure_utils.bind_available_addr _ztx in
@@ -31,40 +39,42 @@ let start ?barrier jid url =
   let%lwt m_pack = (Actor_pure_zmq_repl.recv req) in
   let m = of_msg m_pack in
   let%lwt _ = match m.typ with
-    | Job_Master -> Actor_pure_paramserver.init m _context
-    | Job_Worker -> Actor_pure_paramclient.init m _context
+    | Job_Master -> MyServer.init m _context
+    | Job_Worker -> MyClient.init m _context
     | _ -> Lwt.return (Printf.fprintf Pervasives.stdout "%s\n" "unknown command"; Pervasives.flush Pervasives.stdout)
   in
   Lwt.return (Actor_pure_zmq_repl.close req)
 
-let register_barrier (f : ps_barrier_typ) =
-  Actor_pure_paramserver._barrier := Marshal.to_string f [ Marshal.Closures ]
+let register_barrier (f) =
+  MyServer.update_barrier_fun f
 
-let register_schedule (f : ('a, 'b, 'c) ps_schedule_typ) =
-  Actor_pure_paramserver._schedule := Marshal.to_string f [ Marshal.Closures ]
+let register_schedule f =
+  MyServer.update_schedule_fun f
 
-let register_pull (f : ('a, 'b, 'c) ps_pull_typ) =
-  Actor_pure_paramserver._pull := Marshal.to_string f [ Marshal.Closures ]
+let register_pull f =
+  MyServer.update_pull_fun f
 
-let register_push (f : ('a, 'b, 'c) ps_push_typ) =
-  Actor_pure_paramclient._push := Marshal.to_string f [ Marshal.Closures ]
+let register_push f =
+  MyClient.update_push_fun f
 
-let register_stop (f : ps_stop_typ) =
-  Actor_pure_paramserver._stop := Marshal.to_string f [ Marshal.Closures ]
+let register_stop f =
+  MyServer.update_stop_fun f
 
 let get k =
-  match Actor_pure_paramserver.(!_context.job_id) = "" with
-  | true  -> Actor_pure_paramclient._get k
-  | false -> Lwt.return (Actor_pure_paramserver._get k)
+  match MyServer.(!_context.job_id) = "" with
+  | true  -> MyClient._get k
+  | false -> Lwt.return (MyServer._get k)
 
 let set k v =
-  match Actor_pure_paramserver.(!_context.job_id) = "" with
-  | true  -> Actor_pure_paramclient.(_set k v !_context.step)
-  | false -> Lwt.return (Actor_pure_paramserver.(_set k v !_context.step))
+  match MyServer.(!_context.job_id) = "" with
+  | true  -> MyClient.(_set k v !_context.step)
+  | false -> Lwt.return (MyServer.(_set k v !_context.step))
 
-let keys () = Hashtbl.fold (fun k _v l -> l @ [ Obj.obj k ]) Actor_pure_paramserver._param []
+let keys () = Hashtbl.fold (fun k _v l -> l @ [ Obj.obj k ]) MyServer._param []
 
 let worker_num () =
-  match Actor_pure_paramserver.(!_context.job_id) = "" with
+  match MyServer.(!_context.job_id) = "" with
   | true  -> failwith "Actor_pure_param:worker_num"
-  | false -> StrMap.cardinal Actor_pure_paramserver.(!_context.workers)
+  | false -> StrMap.cardinal MyServer.(!_context.workers)
+
+end

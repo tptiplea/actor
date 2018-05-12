@@ -2,6 +2,11 @@
   includes the types shared by different modules.
 *)
 
+module type KeyValueTypeSig = sig
+  type key_t
+  type value_t
+end
+
 module StrMap = struct
   include Map.Make (String)
   let keys x = List.map fst (bindings x)
@@ -61,18 +66,6 @@ type service_rec = {
   master         : string;
   mutable worker : string array;
 }
-
-(** types of user-defined functions in model parallel module *)
-
-type ('a, 'b, 'c) ps_schedule_typ = 'a list -> ('a * ('b * 'c) list) list
-
-type ('a, 'b, 'c) ps_pull_typ = ('a * 'b) list -> ('a * 'c) list
-
-type ('a, 'b, 'c) ps_push_typ = 'a -> ('b * 'c) list -> ('b * 'c) list
-
-type ps_barrier_typ = param_context ref -> int * (string list)
-
-type ps_stop_typ = param_context ref -> bool
 
 (** two functions to translate between message rec and string *)
 

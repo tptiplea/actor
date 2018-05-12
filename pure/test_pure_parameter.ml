@@ -1,6 +1,11 @@
 (** [ Test parameter server ]  *)
 
-module PS = Actor_pure_param
+module KeyValueTypeSpecifier = struct
+  type key_t = int
+  type value_t = int
+end
+
+module PS = Actor_pure_param.Internal(KeyValueTypeSpecifier)
 
 let schedule workers =
   let tasks = List.map (fun x ->

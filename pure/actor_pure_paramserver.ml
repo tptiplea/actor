@@ -2,25 +2,38 @@
 
 open Actor_pure_types
 
+module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
+  type key_t = KeyValueTypeSpecifier.key_t
+  type value_t = KeyValueTypeSpecifier.value_t
+  type vars_t = (key_t * value_t) list
+
 (* the global context: master, worker, etc. *)
 let _context = ref (Actor_pure_utils.empty_param_context ())
 let _param : (Obj.t, Obj.t * int) Hashtbl.t = Hashtbl.create 1_000_000
 
 (* default schedule function *)
-let _default_schedule = fun _ -> [ ] (** TODO: fix scheduler ... *)
-let _schedule = ref (Marshal.to_string _default_schedule [ Marshal.Closures ])
+let _default_schedule : ('a list -> ('a * (key_t * value_t) list) list) = fun _ -> [ ] (** TODO: fix scheduler ... *)
+let _schedule = ref ( _default_schedule )
+
+let update_schedule_fun f = (_schedule := f)
 
 (* default pull function *)
-let _default_pull = fun updates -> updates
-let _pull = ref (Marshal.to_string _default_pull [ Marshal.Closures ])
+let _default_pull : (vars_t -> vars_t) = fun updates -> updates
+let _pull = ref (_default_pull)
+
+let update_pull_fun f = (_pull := f)
 
 (* default stopping function *)
-let _default_stop = fun _ -> false
-let _stop = ref (Marshal.to_string _default_stop [ Marshal.Closures ])
+let _default_stop : param_context ref -> bool = fun _ -> false
+let _stop = ref (_default_stop)
+
+let update_stop_fun f = (_stop := f)
 
 (* default barrier function *)
 let _default_barrier = Actor_pure_barrier.param_bsp
-let _barrier = ref (Marshal.to_string _default_barrier [ Marshal.Closures ])
+let _barrier = ref ( _default_barrier)
+
+let update_barrier_fun f = (_barrier := f)
 
 let update_steps t w =
   let t' = Hashtbl.find !_context.worker_step w in
@@ -31,12 +44,12 @@ let update_steps t w =
     Hashtbl.add !_context.step_worker t w )
   | false -> ()
 
-let _get k =
+let _get (k : key_t) =
   let k' = Obj.repr k in
   let v, t = Hashtbl.find _param k' in
   Obj.obj v, t
 
-let _set k v t =
+let _set (k : key_t) (v : value_t) (t : int) =
   let k' = Obj.repr k in
   let v' = Obj.repr v in
   match Hashtbl.mem _param k' with
@@ -56,10 +69,10 @@ let terminate () =
 let service_loop () =
   Printf.fprintf Pervasives.stderr "parameter server @ %s\n" !_context.myself_addr;  Pervasives.flush Pervasives.stderr;
   (* unmarshal the schedule and pull functions *)
-  let schedule : ('a, 'b, 'c) ps_schedule_typ = Marshal.from_string !_schedule 0 in
-  let pull : ('a, 'b, 'c) ps_pull_typ = Marshal.from_string !_pull 0 in
-  let barrier : ps_barrier_typ = Marshal.from_string !_barrier 0 in
-  let stop : ps_stop_typ = Marshal.from_string !_stop 0 in
+  let schedule = !_schedule in
+  let pull = !_pull in
+  let barrier = !_barrier in
+  let stop = !_stop in
   (* loop to process messages *)
   try%lwt while%lwt not (stop _context) do
     (* synchronisation barrier check *)
@@ -139,3 +152,4 @@ let init m context =
   ) !_context.workers;
   (* enter into master service loop *)
   service_loop ()
+end
