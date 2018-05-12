@@ -19,9 +19,13 @@
     :standard -w "-50" -safe-string)
   )
 
+  (preprocess (pps (lwt_ppx)))
+
   (libraries (
-    owl-base
     zmq
+    lwt
+    lwt.unix
+    owl-base
    )
 )))
 
@@ -30,7 +34,10 @@
   (names        (actor_pure_manager actor_pure_worker test_pure_parameter test_pure_owl_parallel))
   (package actor_pure)
 
+  (preprocess (pps (lwt_ppx)))
   (modules (actor_pure_manager actor_pure_worker test_pure_parameter test_pure_owl_parallel))
   (libraries (
     actor_pure
+    lwt
+    lwt.unix
 ))))

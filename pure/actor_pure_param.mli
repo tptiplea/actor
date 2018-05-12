@@ -14,7 +14,7 @@ type barrier =
 
 (** core interfaces to parameter server *)
 
-val start : ?barrier:barrier -> string -> string -> unit
+val start : ?barrier:barrier -> string -> string -> unit Lwt.t
 (** start running the model loop *)
 
 val register_barrier : ps_barrier_typ -> unit
@@ -32,10 +32,10 @@ val register_push : ('a, 'b, 'c) ps_push_typ -> unit
 val register_stop : ps_stop_typ -> unit
 (** register stopping criterion function *)
 
-val get : 'a -> 'b * int
+val get : 'a -> ('b * int) Lwt.t
 (** given a key, get its value and timestamp *)
 
-val set : 'a -> 'b -> unit
+val set : 'a -> 'b -> unit Lwt.t
 (** given a key, set its value at master *)
 
 val keys : unit -> 'a list

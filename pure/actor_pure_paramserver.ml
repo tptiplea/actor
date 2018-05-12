@@ -44,12 +44,14 @@ let _set k v t =
   | false -> Hashtbl.add _param k' (v',t)
 
 let _broadcast_all t s =
-  StrMap.iter (fun _k v -> Actor_pure_utils.send ~bar:!_context.step v t s) !_context.workers;
-  !_context.step
+  let bindings = StrMap.bindings !_context.workers in
+  let threads = List.map (fun (_k, v) -> Actor_pure_utils.send ~bar:!_context.step v t s) bindings in
+  let%lwt _ = Lwt.join threads in
+  Lwt.return (!_context.step)
 
 let terminate () =
-  let _ = _broadcast_all Terminate [||] in
-  Unix.sleep 1 (** FIXME: change to BSP *)
+  let%lwt _ = _broadcast_all Terminate [||] in
+  Lwt_unix.sleep 1. (** FIXME: change to BSP *)
 
 let service_loop () =
   Printf.fprintf Pervasives.stderr "parameter server @ %s\n" !_context.myself_addr;  Pervasives.flush Pervasives.stderr;
@@ -59,22 +61,25 @@ let service_loop () =
   let barrier : ps_barrier_typ = Marshal.from_string !_barrier 0 in
   let stop : ps_stop_typ = Marshal.from_string !_stop 0 in
   (* loop to process messages *)
-  try while not (stop _context) do
+  try%lwt while%lwt not (stop _context) do
     (* synchronisation barrier check *)
     let t, passed = barrier _context in !_context.step <- t;
     (* schecule the passed at every message arrival *)
     let tasks = schedule passed in
-    List.iter (fun (worker, task) ->
+    let task_threads =
+    List.map (fun (worker, task) ->
       let w = StrMap.find worker !_context.workers in
       let s = Marshal.to_string task [] in
       let t = Hashtbl.find !_context.worker_step worker + 1 in
       let _ = Hashtbl.replace !_context.worker_busy worker 1 in
       Actor_pure_utils.send ~bar:t w PS_Schedule [|s|]
-    ) tasks;
+    ) tasks
+    in
+    let%lwt _ = Lwt.join task_threads in
     if List.length tasks > 0 then
       Printf.fprintf Pervasives.stderr "schedule t:%i -> %i workers\n" !_context.step (List.length tasks); Pervasives.flush Pervasives.stderr;
     (** wait for another message arrival *)
-    let i, m = Actor_pure_utils.recv !_context.myself_sock in
+    let%lwt i, m = Actor_pure_utils.recv !_context.myself_sock in
     let t = m.bar in
     match m.typ with
     | PS_Get -> (
@@ -88,40 +93,44 @@ let service_loop () =
       Printf.fprintf Pervasives.stderr "%s: ps_set\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       let k = Marshal.from_string m.par.(0) 0 in
       let v = Marshal.from_string m.par.(1) 0 in
-      _set k v t
+      Lwt.return (_set k v t)
       )
     | PS_Push -> (
       Printf.fprintf Pervasives.stderr "%s: ps_push\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
       let updates = Marshal.from_string m.par.(0) 0 |> pull in
       List.iter (fun (k,v) -> _set k v t) updates;
-      update_steps t i
+      Lwt.return (update_steps t i)
       )
-    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
+    | _ -> Lwt.return ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
   done with Failure e -> (
     Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
-    terminate ();
-    Actor_pure_zmq_repl.close !_context.myself_sock )
+    terminate ();%lwt
+    Lwt.return (Actor_pure_zmq_repl.close !_context.myself_sock) )
 
 let init m context =
   _context := context;
   (* contact allocated actors to assign jobs *)
   let addrs = Marshal.from_string m.par.(0) 0 in
+  let sockets_promises =
   List.map (fun x ->
     let req = Actor_pure_zmq_repl.create !_context.ztx Actor_pure_zmq_repl.req in
-    Actor_pure_zmq_repl.connect req x;
+    Actor_pure_zmq_repl.connect req x;%lwt
     let app = Filename.basename Sys.argv.(0) in (* TODO: if we get JS code, get this *)
     let arg = Marshal.to_string Sys.argv [] in
-    Actor_pure_utils.send req Job_Create [|!_context.myself_addr; app; arg|]; req
+    (Actor_pure_utils.send req Job_Create [|!_context.myself_addr; app; arg|]);%lwt Lwt.return req
   ) addrs
-  |> List.iter Actor_pure_zmq_repl.close;
+  in
+  let _close_sockets_threads = List.map (fun sp -> let%lwt s = sp in Lwt.return (Actor_pure_zmq_repl.close s)) sockets_promises in
+  let%lwt _ = Lwt.join _close_sockets_threads in
   (* wait until all the allocated actors register *)
-  while (StrMap.cardinal !_context.workers) < (List.length addrs) do
-    let _i, m = Actor_pure_utils.recv !_context.myself_sock in
+  while%lwt (StrMap.cardinal !_context.workers) < (List.length addrs) do
+    let%lwt _i, m = Actor_pure_utils.recv !_context.myself_sock in
     let s = Actor_pure_zmq_repl.create !_context.ztx Actor_pure_zmq_repl.dealer in
     Actor_pure_zmq_repl.set_send_high_water_mark s Actor_pure_config.high_warter_mark;
-    Actor_pure_zmq_repl.connect s m.par.(0);
+    Actor_pure_zmq_repl.connect s m.par.(0);%lwt
     !_context.workers <- (StrMap.add m.par.(0) s !_context.workers);
-  done;
+    Lwt.return ()
+  done;%lwt
   (* initialise the step <--> work tables *)
   StrMap.iter (fun k _v ->
     Hashtbl.add !_context.worker_busy k 0;

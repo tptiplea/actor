@@ -30,18 +30,6 @@ type message_rec = {
   mutable par : string array;
 }
 
-type mapre_context = {
-  mutable ztx         : Actor_pure_zmq_repl.context_t;                    (* zmq context for communication *)
-  mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
-  mutable master_addr : string;                           (* different meaning in different paradigm *)
-  mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : Actor_pure_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
-  mutable myself_sock : Actor_pure_zmq_repl.socket_router_t;           (* socket of myself_addr *)
-  mutable workers     : Actor_pure_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
-  mutable step        : int;                              (* local step for barrier control *)
-  mutable msbuf       : (int, string * message_rec) Hashtbl.t;  (* buffer of un-ordered messages *)
-}
-
 type param_context = {
   mutable ztx         : Actor_pure_zmq_repl.context_t;                    (* zmq context for communication *)
   mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
@@ -55,20 +43,6 @@ type param_context = {
   mutable worker_busy : (string, int) Hashtbl.t;          (* lookup table of a worker busy or not *)
   mutable worker_step : (string, int) Hashtbl.t;          (* lookup table of a worker's step *)
   mutable step_worker : (int, string) Hashtbl.t;          (* lookup table of workers at a specific step *)
-}
-
-type peer_context = {
-  mutable ztx         : Actor_pure_zmq_repl.context_t;                    (* zmq context for communication *)
-  mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
-  mutable master_addr : string;                           (* different meaning in different paradigm *)
-  mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : Actor_pure_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
-  mutable myself_sock : Actor_pure_zmq_repl.socket_router_t;           (* socket of myself_addr *)
-  mutable workers     : Actor_pure_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
-  mutable step        : int;                              (* local step for barrier control *)
-  mutable block       : bool;                             (* is client blocked at barrier *)
-  mutable mpbuf       : Obj.t list;                       (* buffer of model parameter updates *)
-  mutable spbuf       : (string, int) Hashtbl.t;          (* buffer of the step of connected peers, piggybacked in m.bar *)
 }
 
 type actor_rec = {
@@ -99,18 +73,6 @@ type ('a, 'b, 'c) ps_push_typ = 'a -> ('b * 'c) list -> ('b * 'c) list
 type ps_barrier_typ = param_context ref -> int * (string list)
 
 type ps_stop_typ = param_context ref -> bool
-
-(** types of user-defined functions in p2p parallel module *)
-
-type 'a p2p_schedule_typ = peer_context ref -> 'a list
-
-type ('a, 'b) p2p_pull_typ = peer_context ref -> ('a * 'b * int) list -> ('a * 'b * int) list
-
-type ('a, 'b) p2p_push_typ = peer_context ref -> ('a * 'b) list -> ('a * 'b) list
-
-type p2p_barrier_typ = peer_context ref -> bool
-
-type p2p_stop_typ = peer_context ref -> bool
 
 (** two functions to translate between message rec and string *)
 

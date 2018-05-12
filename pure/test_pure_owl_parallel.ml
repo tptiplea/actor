@@ -1,3 +1,4 @@
+(*
 (* test parameter server engine *)
 module M2 = Owl_base_neural_parallel.Make (Owl_base_neural.S.Graph) (Actor_pure_param)
 let test_neural_parallel () =
@@ -40,3 +41,4 @@ let test_neural_parallel () =
   M2.train ~params nn x y jid url
 
 let _ = test_neural_parallel ()
+*)

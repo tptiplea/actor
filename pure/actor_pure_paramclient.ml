@@ -11,9 +11,10 @@ let _push = ref (Marshal.to_string _default_push [ Marshal.Closures ])
 
 let _get k =
   let k' = Marshal.to_string k [] in
-  Actor_pure_utils.send ~bar:!_context.step !_context.master_sock PS_Get [|k'|];
-  let m = of_msg (Actor_pure_zmq_repl.recv !_context.master_sock) in
-  Marshal.from_string m.par.(0) 0, m.bar
+  let%lwt _ = Actor_pure_utils.send ~bar:!_context.step !_context.master_sock PS_Get [|k'|] in
+  let%lwt m = (Actor_pure_zmq_repl.recv !_context.master_sock) in
+  let m = of_msg m in
+  Lwt.return (Marshal.from_string m.par.(0) 0, m.bar)
 
 let _set k v t =
   let k' = Marshal.to_string k [] in
@@ -30,8 +31,8 @@ let service_loop () =
   (* unmarshal the push function *)
   let push : 'a -> ('b * 'c) list -> ('b * 'c) list = Marshal.from_string !_push 0 in
   (* loop to process messages *)
-  try while true do
-    let _i, m = Actor_pure_utils.recv !_context.myself_sock in
+  try%lwt while%lwt true do
+    let%lwt _i, m = Actor_pure_utils.recv !_context.myself_sock in
     let t = m.bar in
     match m.typ with
     | PS_Schedule -> (
@@ -43,12 +44,12 @@ let service_loop () =
       )
     | Terminate -> (
       Printf.fprintf Pervasives.stderr "%s: terminate\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
-      Actor_pure_utils.send ~bar:t !_context.master_sock OK [||];
-      Unix.sleep 1; (* FIXME: sleep ... *)
-      failwith ("#" ^ !_context.job_id ^ " terminated")
+      Actor_pure_utils.send ~bar:t !_context.master_sock OK [||];%lwt
+      Lwt_unix.sleep 1.0;%lwt (* FIXME: sleep ... *)
+      Lwt.return (failwith ("#" ^ !_context.job_id ^ " terminated"))
       )
-    | _ -> ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
-  done with Failure e -> (
+    | _ -> Lwt.return ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
+  done with Failure e -> Lwt.return (
     Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
     Actor_pure_zmq_repl.close !_context.myself_sock;
     Pervasives.exit 0 )
@@ -60,8 +61,8 @@ let init m context =
   let master = Actor_pure_zmq_repl.create !_context.ztx Actor_pure_zmq_repl.dealer in
   Actor_pure_zmq_repl.set_send_high_water_mark master Actor_pure_config.high_warter_mark;
   Actor_pure_zmq_repl.set_identity master !_context.myself_addr;
-  Actor_pure_zmq_repl.connect master !_context.master_addr;
-  Actor_pure_utils.send master OK [|!_context.myself_addr|];
+  Actor_pure_zmq_repl.connect master !_context.master_addr;%lwt
+  Actor_pure_utils.send master OK [|!_context.myself_addr|];%lwt
   !_context.master_sock <- master;
   (* enter into worker service loop *)
   service_loop ()

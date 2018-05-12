@@ -17,10 +17,10 @@ let start ?barrier jid url =
   Actor_pure_paramserver._barrier := _barrier_str;
   (* start preparing communication context *)
   let _ztx = Actor_pure_zmq_repl.context_create () in
-  let _addr, _router = Actor_pure_utils.bind_available_addr _ztx in
+  let%lwt _addr, _router = Actor_pure_utils.bind_available_addr _ztx in
   let req = Actor_pure_zmq_repl.create _ztx Actor_pure_zmq_repl.req in
-  Actor_pure_zmq_repl.connect req url;
-  Actor_pure_utils.send req Job_Reg [|_addr; jid|];
+  Actor_pure_zmq_repl.connect req url;%lwt
+  Actor_pure_utils.send req Job_Reg [|_addr; jid|];%lwt
   (* create and initialise part of the context *)
   let _context = Actor_pure_utils.empty_param_context () in
   _context.job_id <- jid;
@@ -28,13 +28,14 @@ let start ?barrier jid url =
   _context.myself_sock <- _router;
   _context.ztx <- _ztx;
   (* depends on the role, start server or client *)
-  let m = of_msg (Actor_pure_zmq_repl.recv req) in
-  let _ = match m.typ with
+  let%lwt m_pack = (Actor_pure_zmq_repl.recv req) in
+  let m = of_msg m_pack in
+  let%lwt _ = match m.typ with
     | Job_Master -> Actor_pure_paramserver.init m _context
     | Job_Worker -> Actor_pure_paramclient.init m _context
-    | _ -> Printf.fprintf Pervasives.stdout "%s\n" "unknown command"; Pervasives.flush Pervasives.stdout;
+    | _ -> Lwt.return (Printf.fprintf Pervasives.stdout "%s\n" "unknown command"; Pervasives.flush Pervasives.stdout)
   in
-  Actor_pure_zmq_repl.close req
+  Lwt.return (Actor_pure_zmq_repl.close req)
 
 let register_barrier (f : ps_barrier_typ) =
   Actor_pure_paramserver._barrier := Marshal.to_string f [ Marshal.Closures ]
@@ -54,12 +55,12 @@ let register_stop (f : ps_stop_typ) =
 let get k =
   match Actor_pure_paramserver.(!_context.job_id) = "" with
   | true  -> Actor_pure_paramclient._get k
-  | false -> Actor_pure_paramserver._get k
+  | false -> Lwt.return (Actor_pure_paramserver._get k)
 
 let set k v =
   match Actor_pure_paramserver.(!_context.job_id) = "" with
   | true  -> Actor_pure_paramclient.(_set k v !_context.step)
-  | false -> Actor_pure_paramserver.(_set k v !_context.step)
+  | false -> Lwt.return (Actor_pure_paramserver.(_set k v !_context.step))
 
 let keys () = Hashtbl.fold (fun k _v l -> l @ [ Obj.obj k ]) Actor_pure_paramserver._param []
 

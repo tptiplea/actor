@@ -30,7 +30,7 @@ let process r m =
     if Workers.mem uid = false then
       Printf.fprintf Pervasives.stdout "%s\n" (uid ^ " @ " ^ addr); Pervasives.flush Pervasives.stdout;
       Workers.add uid addr;
-      Actor_pure_utils.send r OK [||];
+      Actor_pure_utils.send r OK [||]
     )
   | Job_Reg -> (
     let master, jid = m.par.(0), m.par.(1) in
@@ -46,7 +46,7 @@ let process r m =
   | Heartbeat -> (
     Printf.fprintf Pervasives.stdout "%s\n" ("heartbeat @ " ^ m.par.(0)); Pervasives.flush Pervasives.stdout;
     Workers.add m.par.(0) m.par.(1);
-    Actor_pure_utils.send r OK [||];
+    Actor_pure_utils.send r OK [||]
     )
   | P2P_Reg -> (
     let addr, jid = m.par.(0), m.par.(1) in
@@ -55,22 +55,24 @@ let process r m =
     let peers = Actor_pure_service.choose_workers jid 10 in
     let peers = Marshal.to_string peers [] in
     Actor_pure_service.add_worker jid addr;
-    Actor_pure_utils.send r OK [|peers|];
+    Actor_pure_utils.send r OK [|peers|]
     )
-  | _ -> (
+  | _ -> Lwt.return (
     Printf.fprintf Pervasives.stderr "unknown message type\n";  Pervasives.flush Pervasives.stderr
     )
 
 let run _id addr =
   let _ztx = Actor_pure_zmq_repl.context_create () in
   let rep = Actor_pure_zmq_repl.create _ztx Actor_pure_zmq_repl.rep in
-  Actor_pure_zmq_repl.bind rep addr;
-  while true do
-    let m = of_msg (Actor_pure_zmq_repl.recv rep) in
-    process rep m;
-  done;
+  Actor_pure_zmq_repl.bind rep addr;%lwt
+  while%lwt true do
+    let%lwt m_pack = (Actor_pure_zmq_repl.recv rep) in
+    let m = of_msg m_pack in
+    process rep m
+  done;%lwt
   Actor_pure_zmq_repl.close rep;
-  Actor_pure_zmq_repl.context_terminate _ztx
+  Actor_pure_zmq_repl.context_terminate _ztx;
+  Lwt.return ()
 
 let install_app _x = None
 

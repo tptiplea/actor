@@ -29,7 +29,7 @@ let router = Zmq.Socket.router
 (* Used in lib/actor_paramclient *) (* through utils *)
 (* Used in lib/actor_paramserver *) (* through utils *)
 (* Always blocking *)
-let recv_all s = Zmq.Socket.recv_all ~block:true s
+let recv_all s = Lwt.return (Zmq.Socket.recv_all ~block:true s)
 (* val recv_all : ?block:bool -> 'a t -> string list *)
 (* these are multipart messages *)
 
@@ -38,11 +38,11 @@ let recv_all s = Zmq.Socket.recv_all ~block:true s
 (* Used in lib/actor_param *) (* through utils *)
 (* Used in lib/actor_paramclient *) (* through utils *)
 (* Used in lib/actor_paramserver *) (* through utils *)
-let send ?(block=true) v m = Zmq.Socket.send ~block v m
+let send ?(block=true) v m = Lwt.return (Zmq.Socket.send ~block v m)
 (* *)
 
 (* Used in lib/actor_paramserver *)
-let send_all ?(block=true) v m = Zmq.Socket.send_all ~block v m
+let send_all ?(block=true) v m = Lwt.return (Zmq.Socket.send_all ~block v m)
 (* val send : ?block:bool -> ?more:bool -> 'a t -> string -> unit *)
 
 (* Used in src/actor_worker *)
@@ -59,14 +59,14 @@ let create ztx req = Zmq.Socket.create ztx req
 
 (* Used in src/actor_worker *)
 (* Used in src/actor_manager *)
-let bind sock addr = Zmq.Socket.bind sock addr
+let bind sock addr = Lwt.return (Zmq.Socket.bind sock addr)
 (* val bind : 'a t -> string -> unit *)
 
 (* Used in src/actor_worker *)
 (* Used in lib/actor_param *)
 (* Used in lib/actor_paramclient *)
 (* Used in lib/actor_paramserver *)
-let connect req url = Zmq.Socket.connect req url
+let connect req url = Lwt.return (Zmq.Socket.connect req url)
 (* val connect : 'a t -> string -> unit *)
 
 (* Used in src/actor_worker *)
@@ -74,7 +74,7 @@ let connect req url = Zmq.Socket.connect req url
 (* Used in lib/actor_param *)
 (* Used in lib/actor_paramclient *)
 (* Always blocking *)
-let recv req = Zmq.Socket.recv ~block:true req
+let recv req = Lwt.return (Zmq.Socket.recv ~block:true req)
 (* val recv : ?block:bool -> 'a t -> string *)
 
 (* Used in src/actor_worker *)
