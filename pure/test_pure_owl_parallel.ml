@@ -1,6 +1,5 @@
-(*
 (* test parameter server engine *)
-module M2 = Owl_base_neural_parallel.Make (Owl_base_neural.S.Graph) (Actor_pure_param)
+module M2 = Owl_baselwt_neural_parallel.Make (Owl_base_neural.S.Graph) (Actor_pure_param.Internal)
 let test_neural_parallel () =
   let open Owl_base_neural.S in
   let open Graph in
@@ -40,5 +39,4 @@ let test_neural_parallel () =
   let jid = Sys.argv.(1) in
   M2.train ~params nn x y jid url
 
-let _ = test_neural_parallel ()
-*)
+let _ = Lwt_main.run (test_neural_parallel ())
