@@ -10,7 +10,7 @@ module PS = Actor_pure_param.Internal(KeyValueTypeSpecifier)
 let schedule workers =
   let tasks = List.map (fun x ->
     let k, v = Random.int 100, Random.int 1000 in (x, [(k,v)])
-  ) workers in tasks
+  ) workers in Lwt.return tasks
 
 let push _ vars =
   let updates = List.map (fun (k,v) ->

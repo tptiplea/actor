@@ -27,10 +27,10 @@ val start : ?barrier:barrier -> string -> string -> unit Lwt.t
 val register_barrier : (param_context ref -> int * (string list)) -> unit
 (** register user-defined barrier function at p2p server *)
 
-val register_schedule : (string list -> (string * (key_t * value_t) list) list) -> unit
+val register_schedule : (string list -> (string * (key_t * value_t) list) list Lwt.t) -> unit
 (** register user-defined scheduler *)
 
-val register_pull : ((key_t * value_t) list -> (key_t * value_t) list) -> unit
+val register_pull : ((key_t * value_t) list -> (key_t * value_t) Lwt.t list) -> unit
 (** register user-defined pull function executed at master *)
 
 val register_push : ((string -> (key_t * value_t) list -> (key_t * value_t) list)) -> unit

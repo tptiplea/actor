@@ -12,13 +12,13 @@ let _context = ref (Actor_pure_utils.empty_param_context ())
 let _param : (Obj.t, Obj.t * int) Hashtbl.t = Hashtbl.create 1_000_000
 
 (* default schedule function *)
-let _default_schedule : ('a list -> ('a * (key_t * value_t) list) list) = fun _ -> [ ] (** TODO: fix scheduler ... *)
+let _default_schedule : (string list -> (string * (key_t * value_t) list) list Lwt.t) = fun _ -> Lwt.return [ ] (** TODO: fix scheduler ... *)
 let _schedule = ref ( _default_schedule )
 
 let update_schedule_fun f = (_schedule := f)
 
 (* default pull function *)
-let _default_pull : (vars_t -> vars_t) = fun updates -> updates
+let _default_pull : ((key_t * value_t) list -> (key_t * value_t) Lwt.t list) = fun updates -> List.map (fun p -> Lwt.return p) updates
 let _pull = ref (_default_pull)
 
 let update_pull_fun f = (_pull := f)
@@ -78,7 +78,7 @@ let service_loop () =
     (* synchronisation barrier check *)
     let t, passed = barrier _context in !_context.step <- t;
     (* schecule the passed at every message arrival *)
-    let tasks = schedule passed in
+    let%lwt tasks = schedule passed in
     let task_threads =
     List.map (fun (worker, task) ->
       let w = StrMap.find worker !_context.workers in
@@ -110,8 +110,9 @@ let service_loop () =
       )
     | PS_Push -> (
       Printf.fprintf Pervasives.stderr "%s: ps_push\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
-      let updates = Marshal.from_string m.par.(0) 0 |> pull in
-      List.iter (fun (k,v) -> _set k v t) updates;
+      let updates_promises = Marshal.from_string m.par.(0) 0 |> pull in
+      let updates_done = List.map (fun update_promise -> let%lwt k, v = update_promise in Lwt.return (_set k v t)) updates_promises in
+      let%lwt _ = Lwt.join updates_done in
       Lwt.return (update_steps t i)
       )
     | _ -> Lwt.return ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
