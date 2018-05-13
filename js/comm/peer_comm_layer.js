@@ -53,41 +53,43 @@ function send_msg_to_server(msg) {
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {IOSOCKET receive stuff ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 function process_msg_from_server(msg) {
-    if (msg['kind'] === SERVER_TO_PEER_KIND) {
+    if (msg.kind === SERVER_TO_PEER_KIND) {
         // A message from the server.
 
-        if (msg['operation'] === REGISTER_UNXISOCKET_OP || msg['operation'] === UNREGISTER_UNIXSOCKET_OP) {
+        if (msg.operation === REGISTER_UNXISOCKET_OP || msg.operation === UNREGISTER_UNIXSOCKET_OP) {
             // The result of (un)register operation.
-            var result = msg['result'];
-            var unixsocket_id = msg['unixsocket_id'];
+            var result = msg.result;
+            var unixsocket_id = msg.unixsocket_id;
             var promise_name =
-                msg['operation'] === REGISTER_UNXISOCKET_OP ? promise_name_for_register_unixsocket_id(unixsocket_id)
+                msg.operation === REGISTER_UNXISOCKET_OP ? promise_name_for_register_unixsocket_id(unixsocket_id)
                     : promise_name_for_unregister_unixsocket_id(unixsocket_id);
-            if (result === OK_STATUS)
+            if (result === OK_STATUS) {
                 resolve_promise(promise_name, OK_STATUS);
-            else
-                reject_promise(promise_name, msg['error_msg']);
+            }
+            else {
+                reject_promise(promise_name, msg.error_msg);
+            }
 
-        } else if (msg['operation'] === CONNECTION_OP) {
+        } else if (msg.operation === CONNECTION_OP) {
             // Successfully connected to server.
             resolve_promise(CONNECTED_TO_SERVER_PROMISE_NAME)
-        } else if (msg['operation'] === SERVER_PEER_TO_PEER_OP) {
-            if (msg['result'] !== OK_STATUS) {
+        } else if (msg.operation === SERVER_PEER_TO_PEER_OP) {
+            if (msg.result !== OK_STATUS) {
                 // Server failed to send a message to other peer, probably waitlisted.
-                console.log(msg['error_msg']);
+                console.log(msg.error_msg);
             }
         } else {
-            throw "Unknown SERVER_TO_PEER operation " + msg['operation'];
+            throw "Unknown SERVER_TO_PEER operation " + msg.operation;
         }
 
-    } else if (msg['kind'] === PEER_TO_PEER_KIND) {
+    } else if (msg.kind === PEER_TO_PEER_KIND) {
         // A message from another peer, redirected by the server.
-        if (msg['operation'] === ACK_OP) {
+        if (msg.operation === ACK_OP) {
             // An ack for a message from here, update the promise accordingly!.
-            var msg_id = msg['msg_id'];
+            var msg_id = msg.msg_id;
             try {
                 var promise_name = promise_name_from_msg_id_ack(msg_id);
-                if (msg['result'] === OK_STATUS)
+                if (msg.result === OK_STATUS)
                     resolve_promise(promise_name, OK_STATUS);
                 else
                     reject_promise(promise_name, msg['result']);

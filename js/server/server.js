@@ -48,16 +48,16 @@ function send_msg_to_peer(iosocket, msg) { // ASYNC
 }
 
 function process_msg_from_peer(iosocket, msg) {
-    const kind = msg['kind'];
+    const kind = msg.kind;
 
     if (kind === PEER_TO_SERVER_KIND) {
         // This is a message from the peer, for the server.
-        const operation = msg['operation'];
+        const operation = msg.operation;
 
         if (operation === REGISTER_UNXISOCKET_OP) {
-            register_unixsocket(iosocket, msg['unixsocket_id']);
+            register_unixsocket(iosocket, msg.unixsocket_id);
         } else if (operation === UNREGISTER_UNIXSOCKET_OP) {
-            unregister_unixsocket(iosocket, msg['unixsocket_id']);
+            unregister_unixsocket(iosocket, msg.unixsocket_id);
         }
 
     } else if (kind === PEER_TO_PEER_KIND) {
@@ -74,7 +74,7 @@ function process_msg_from_peer(iosocket, msg) {
 
 // Send a message to another unixsocket.
 function process_peer_to_peer_msg(from_iosocket, msg) {
-    const to_unixsocket_id = msg['to_unixsocket_id'];
+    const to_unixsocket_id = msg.to_unixsocket_id;
 
     if (to_unixsocket_id in unixsocket_to_iosocket) {
         const to_iosocket = unixsocket_to_iosocket[to_unixsocket_id];
@@ -84,7 +84,7 @@ function process_peer_to_peer_msg(from_iosocket, msg) {
             'kind': SERVER_TO_PEER_KIND,
             'operation': SERVER_PEER_TO_PEER_OP,
             'result': OK_STATUS,
-            'msg_id': msg['msg_id']
+            'msg_id': msg.msg_id
         });
     } else {
         const error_msg = 'Error - P2P: unixsocket ' + to_unixsocket_id + ' not registered with server! Waitlisting msg';
@@ -94,7 +94,7 @@ function process_peer_to_peer_msg(from_iosocket, msg) {
             'kind': SERVER_TO_PEER_KIND,
             'operation': SERVER_PEER_TO_PEER_OP,
             'result': FAIL_STATUS,
-            'msg_id': msg['msg_id'],
+            'msg_id': msg.msg_id,
             'error_msg': error_msg
         });
 
