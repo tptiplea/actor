@@ -1,3 +1,18 @@
+//* CONSTANTS **////
+const SERVER_TO_PEER_KIND = 'SERVER_TO_PEER';
+const PEER_TO_SERVER_KIND = 'PEER_TO_SERVER';
+const PEER_TO_PEER_KIND = 'PEER_TO_PEER';
+const REGISTER_UNXISOCKET_OP = 'REGISTER_UNIXSOCKET';
+const UNREGISTER_UNIXSOCKET_OP = 'UNREGISTER_UNIXSOCKET';
+const SERVER_PEER_TO_PEER_OP = 'PEER_TO_PEER_OP_SERVER';
+const CONNECTION_OP = 'CONNECTION_OP';
+const ACK_OP = 'ACK_OPERATION';
+const OK_STATUS = 'SUCCESS';
+const FAIL_STATUS = 'FAIL';
+
+//****************///
+
+
 var app = require('http').createServer(handler);
 var io = require('socket.io')(app);
 const port = 3000;
@@ -20,32 +35,32 @@ io.on('connection', function (iosocket) {
 
     // Acknowledge connection!
     send_msg_to_peer(iosocket, {
-       'kind': 'SERVER_TO_PEER',
-       'operation': 'CONNECTION',
-       'result': 'SUCCESS'
+       'kind': SERVER_TO_PEER_KIND,
+       'operation': CONNECTION_OP,
+       'result': OK_STATUS
     });
 });
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ COMMUNICATE ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
-function send_msg_to_peer(iosocket, msg) {
+function send_msg_to_peer(iosocket, msg) { // ASYNC
     iosocket.emit('server_to_peer', msg);
 }
 
 function process_msg_from_peer(iosocket, msg) {
     const kind = msg['kind'];
 
-    if (kind === 'PEER_TO_SERVER') {
+    if (kind === PEER_TO_SERVER_KIND) {
         // This is a message from the peer, for the server.
         const operation = msg['operation'];
 
-        if (operation === 'REGISTER_UNIXSOCKET') {
+        if (operation === REGISTER_UNXISOCKET_OP) {
             register_unixsocket(iosocket, msg['unixsocket_id']);
-        } else if (operation === 'UNREGISTER_UNIXSOCKET') {
+        } else if (operation === UNREGISTER_UNIXSOCKET_OP) {
             unregister_unixsocket(iosocket, msg['unixsocket_id']);
         }
 
-    } else if (kind === 'PEER_TO_PEER') {
+    } else if (kind === PEER_TO_PEER_KIND) {
         // This is a message from the peer for another peer, server is just an intermediary.
         process_peer_to_peer_msg(iosocket, msg);
     } else {
@@ -63,30 +78,30 @@ function process_peer_to_peer_msg(from_iosocket, msg) {
 
     if (to_unixsocket_id in unixsocket_to_iosocket) {
         const to_iosocket = unixsocket_to_iosocket[to_unixsocket_id];
-        send_msg_to_peer(to_iosocket, msg);
+        send_msg_to_peer(to_iosocket, msg); // Send message to other peer (dest).
 
-        send_msg_to_peer(to_iosocket, {
-            'kind': 'FROM_SERVER',
-            'operation': 'PEER_TO_PEER_OP',
-            'result': 'SUCCESS',
+        send_msg_to_peer(from_iosocket, { // Send a confirmation back to sender.
+            'kind': SERVER_TO_PEER_KIND,
+            'operation': SERVER_PEER_TO_PEER_OP,
+            'result': OK_STATUS,
             'msg_id': msg['msg_id']
         });
     } else {
-        const error_msg = 'Error - P2P: unixsocket ' + to_unixsocket_id + ' not registered with server!';
+        const error_msg = 'Error - P2P: unixsocket ' + to_unixsocket_id + ' not registered with server! Waitlisting msg';
         console.log(error_msg);
 
-        send_msg_to_peer(to_iosocket, {
-            'kind': 'FROM_SERVER',
-            'operation': 'PEER_TO_PEER_OP',
-            'result': 'FAIL',
+        send_msg_to_peer(from_iosocket, {
+            'kind': SERVER_TO_PEER_KIND,
+            'operation': SERVER_PEER_TO_PEER_OP,
+            'result': FAIL_STATUS,
             'msg_id': msg['msg_id'],
             'error_msg': error_msg
         });
 
         if (to_unixsocket_id in waitlist_for_unixsocket)
-            waitlist_for_unixsocket[to_unixsocket_id].push({data: data, from_iosocket: iosocket});
+            waitlist_for_unixsocket[to_unixsocket_id].push(msg);
         else
-            waitlist_for_unixsocket[to_unixsocket_id] = [{data: data, from_iosocket: iosocket}];
+            waitlist_for_unixsocket[to_unixsocket_id] = [msg];
     }
 }
 /**  -------------------------------------------- PEER TO PEER --------------------------------- */
@@ -106,9 +121,9 @@ function register_unixsocket(iosocket, unixsocket_id) {
         console.log(error_msg);
 
         send_msg_to_peer(iosocket, {
-            'kind': 'SERVER_TO_PEER',
-            'operation': 'REGISTER_UNIXSOCKET',
-            'result': 'FAIL',
+            'kind': SERVER_TO_PEER_KIND,
+            'operation': REGISTER_UNXISOCKET_OP,
+            'result': FAIL_STATUS,
             'unixsocket_id': unixsocket_id,
             'error_msg': error_msg
         });
@@ -125,17 +140,17 @@ function register_unixsocket(iosocket, unixsocket_id) {
         iosocket_to_unixsockets[iosocket.id] = [unixsocket_id];
 
     send_msg_to_peer(iosocket, {
-        'kind': 'SERVER_TO_PEER',
-        'operation': 'REGISTER_UNIXSOCKET',
-        'result': 'SUCCESS',
+        'kind': SERVER_TO_PEER_KIND,
+        'operation': REGISTER_UNXISOCKET_OP,
+        'result': OK_STATUS,
         'unixsocket_id': unixsocket_id
     });
 
     if (unixsocket_id in waitlist_for_unixsocket) {
-        let queue = waitlist_for_unixsocket[unixsocket_id];
-        let len = queue.length;
+        var queue = waitlist_for_unixsocket[unixsocket_id];
+        var len = queue.length;
 
-        for (let i = 0; i < len; i++) {
+        for (var i = 0; i < len; i++) {
             send_msg_to_peer(iosocket, queue[i]);
         }
 
@@ -151,26 +166,26 @@ function unregister_unixsocket(iosocket, unixsocket_id) {
         delete unixsocket_to_iosocket[unixsocket_id];
 
         if (iosocket.id in iosocket_to_unixsockets) {
-            let index_of_unix = iosocket_to_unixsockets[iosocket.id].indexOf(unixsocket_id);
+            var index_of_unix = iosocket_to_unixsockets[iosocket.id].indexOf(unixsocket_id);
             if (index_of_unix > -1)
                 iosocket_to_unixsockets[iosocket.id].splice(index_of_unix, 1);
         }
 
         send_msg_to_peer(iosocket, {
-            'kind': 'SERVER_TO_PEER',
-            'operation': 'UNREGISTER_UNIXSOCKET',
-            'result': 'SUCCESS',
+            'kind': SERVER_TO_PEER_KIND,
+            'operation': UNREGISTER_UNIXSOCKET_OP,
+            'result': OK_STATUS,
             'unixsocket_id': unixsocket_id
         });
     } else {
         // Otherwise, an error.
-        let error_msg = 'Error - unregister_unixsocket: unixsocket ' + unixsocket_id + ' not registered with server!';
+        var error_msg = 'Error - unregister_unixsocket: unixsocket ' + unixsocket_id + ' not registered with server!';
         console.log(error_msg);
 
         send_msg_to_peer(iosocket, {
-            'kind': 'SERVER_TO_PEER',
-            'operation': 'UNREGISTER_UNIXSOCKET',
-            'result': 'FAIL',
+            'kind': SERVER_TO_PEER_KIND,
+            'operation': UNREGISTER_UNIXSOCKET_OP,
+            'result': FAIL_STATUS,
             'unixsocket_id': unixsocket_id,
             'error_msg': error_msg
         });
