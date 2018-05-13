@@ -1,19 +1,22 @@
 const SERVER_URL = "http://localhost:3000";  // TODO: add the server URL here
-const MY_UNIQUE_ID = make_random_id(10);
 
 
 //* CONSTANTS **////
-const SERVER_TO_PEER_KIND = 'SERVER_TO_PEER';
-const PEER_TO_SERVER_KIND = 'PEER_TO_SERVER';
-const PEER_TO_PEER_KIND = 'PEER_TO_PEER';
-const REGISTER_UNXISOCKET_OP = 'REGISTER_UNIXSOCKET';
-const UNREGISTER_UNIXSOCKET_OP = 'UNREGISTER_UNIXSOCKET';
-const SERVER_PEER_TO_PEER_OP = 'PEER_TO_PEER_OP_SERVER';
-const MSG_PEER_TO_PEER_OP = 'MSG_PEER_TO_PEER_OP';
-const CONNECTION_OP = 'CONNECTION_OP';
-const ACK_OP = 'ACK_OPERATION';
-const OK_STATUS = 'SUCCESS';
-const FAIL_STATUS = 'FAIL';
+const PCL_CONSTS = {
+    MY_UNIQUE_ID : make_random_id(10),
+    SERVER_TO_PEER_KIND : 'SERVER_TO_PEER',
+    PEER_TO_SERVER_KIND : 'PEER_TO_SERVER',
+    PEER_TO_PEER_KIND : 'PEER_TO_PEER',
+    REGISTER_UNIXSOCKET_OP : 'REGISTER_UNIXSOCKET',
+    UNREGISTER_UNIXSOCKET_OP : 'UNREGISTER_UNIXSOCKET',
+    SERVER_PEER_TO_PEER_OP : 'PEER_TO_PEER_OP_SERVER',
+    MSG_PEER_TO_PEER_OP : 'MSG_PEER_TO_PEER_OP',
+    CONNECTION_OP : 'CONNECTION_OP',
+    ACK_OP : 'ACK_OPERATION',
+    OK_STATUS : 'SUCCESS',
+    FAIL_STATUS : 'FAIL',
+    CONNECTED_TO_SERVER_PROMISE_NAME : "connected_to_server_promise"
+};
 
 //****************///
 
@@ -21,30 +24,31 @@ const FAIL_STATUS = 'FAIL';
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
-var TOTAL_MESSAGES_SENT = 0;
-const CONNECTED_TO_SERVER_PROMISE_NAME = "connected_to_server_promise";
-var unixsocket_ids_dict = {}; // keep track of unixsocket ids bound on this server
-var promise_dict = {}; // keep track of promises
+var PCL_VARS = {
+    IOSOCKET : io(SERVER_URL),
+    TOTAL_MESSAGES_SENT : 0,
+    UNIXSOCKET_IDS_DICT : {}, // keep track of unixsocket ids bound on this server
+    PROMISES_DICT : {} // keep track of promises
+};
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 
 // Connect to server.
-var iosocket = io(SERVER_URL);
-iosocket.on('server_to_peer', process_msg_from_server);
+PCL_VARS.IOSOCKET.on('server_to_peer', process_msg_from_server);
 
 // The semaphore that tells us whether we're connected to the server.
-create_promise(CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
-get_existing_promise(CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
-    console.log('CONNECTED TO IO SERVER, got id:', MY_UNIQUE_ID);
+create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
+get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
+    console.log('CONNECTED TO IO SERVER, got id:', PCL_CONSTS.MY_UNIQUE_ID);
 });
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {IOSOCKET send stuff ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 // Send a msg to server, return a promise after that is done.
 function send_msg_to_server(msg) {
-    return get_existing_promise(CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
-        iosocket.emit('peer_to_server', msg);
+    return get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
+        PCL_VARS.IOSOCKET.emit('peer_to_server', msg);
     });
 }
 /** ------------------------------------------------ IOSOCKET send stuff} ------------------------------- */
@@ -53,28 +57,28 @@ function send_msg_to_server(msg) {
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {IOSOCKET receive stuff ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 function process_msg_from_server(msg) {
-    if (msg.kind === SERVER_TO_PEER_KIND) {
+    if (msg.kind === PCL_CONSTS.SERVER_TO_PEER_KIND) {
         // A message from the server.
 
-        if (msg.operation === REGISTER_UNXISOCKET_OP || msg.operation === UNREGISTER_UNIXSOCKET_OP) {
+        if (msg.operation === PCL_CONSTS.REGISTER_UNIXSOCKET_OP || msg.operation === PCL_CONSTS.UNREGISTER_UNIXSOCKET_OP) {
             // The result of (un)register operation.
             var result = msg.result;
             var unixsocket_id = msg.unixsocket_id;
             var promise_name =
-                msg.operation === REGISTER_UNXISOCKET_OP ? promise_name_for_register_unixsocket_id(unixsocket_id)
+                msg.operation === PCL_CONSTS.REGISTER_UNIXSOCKET_OP ? promise_name_for_register_unixsocket_id(unixsocket_id)
                     : promise_name_for_unregister_unixsocket_id(unixsocket_id);
-            if (result === OK_STATUS) {
-                resolve_promise(promise_name, OK_STATUS);
+            if (result === PCL_CONSTS.OK_STATUS) {
+                resolve_promise(promise_name, PCL_CONSTS.OK_STATUS);
             }
             else {
                 reject_promise(promise_name, msg.error_msg);
             }
 
-        } else if (msg.operation === CONNECTION_OP) {
+        } else if (msg.operation === PCL_CONSTS.CONNECTION_OP) {
             // Successfully connected to server.
-            resolve_promise(CONNECTED_TO_SERVER_PROMISE_NAME)
-        } else if (msg.operation === SERVER_PEER_TO_PEER_OP) {
-            if (msg.result !== OK_STATUS) {
+            resolve_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME);
+        } else if (msg.operation === PCL_CONSTS.SERVER_PEER_TO_PEER_OP) {
+            if (msg.result !== PCL_CONSTS.OK_STATUS) {
                 // Server failed to send a message to other peer, probably waitlisted.
                 console.log(msg.error_msg);
             }
@@ -82,26 +86,27 @@ function process_msg_from_server(msg) {
             throw "Unknown SERVER_TO_PEER operation " + msg.operation;
         }
 
-    } else if (msg.kind === PEER_TO_PEER_KIND) {
+    } else if (msg.kind === PCL_CONSTS.PEER_TO_PEER_KIND) {
         // A message from another peer, redirected by the server.
-        if (msg.operation === ACK_OP) {
+        if (msg.operation === PCL_CONSTS.ACK_OP) {
             // An ack for a message from here, update the promise accordingly!.
             var msg_id = msg.msg_id;
             try {
                 var promise_name = promise_name_from_msg_id_ack(msg_id);
-                if (msg.result === OK_STATUS)
-                    resolve_promise(promise_name, OK_STATUS);
-                else
-                    reject_promise(promise_name, msg['result']);
+                if (msg.result === PCL_CONSTS.OK_STATUS) {
+                    resolve_promise(promise_name, PCL_CONSTS.OK_STATUS);
+                } else {
+                    reject_promise(promise_name, msg.result);
+                }
             } catch (err) {
                 console.log('Ack for a non existing message probably:', err);
             }
 
-        } else if (msg['operation'] === MSG_PEER_TO_PEER_OP) {
-            var from_unixsocket_id = msg['from_unixsocket_id'];
-            var to_unixsocket_id = msg['to_unixsocket_id'];
-            var payload = msg['payload'];
-            var msg_id = msg['msg_id'];
+        } else if (msg.operation === PCL_CONSTS.MSG_PEER_TO_PEER_OP) {
+            var from_unixsocket_id = msg.from_unixsocket_id;
+            var to_unixsocket_id = msg.to_unixsocket_id;
+            var payload = msg.payload;
+            var msg_id = msg.msg_id;
 
             process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, payload, msg_id);
         }
@@ -116,15 +121,15 @@ function process_msg_from_server(msg) {
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ REGISTER/UNREGISTER UNIXSOCKETS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 function register_unixsocket_id(unixsocket_id) {
-    if (unixsocket_id in unixsocket_ids_dict) {
+    if (unixsocket_id in PCL_VARS.UNIXSOCKET_IDS_DICT) {
         throw "Unixsocket with id " + unixsocket_id + " already bound";
     }
-    unixsocket_ids_dict[unixsocket_id] = true;
+    PCL_VARS.UNIXSOCKET_IDS_DICT[unixsocket_id] = true;
 
     var promise_name = promise_name_for_register_unixsocket_id(unixsocket_id);
     send_msg_to_server({
-        'kind': PEER_TO_SERVER_KIND,
-        'operation': REGISTER_UNXISOCKET_OP,
+        'kind': PCL_CONSTS.PEER_TO_SERVER_KIND,
+        'operation': PCL_CONSTS.REGISTER_UNIXSOCKET_OP,
         'unixsocket_id': unixsocket_id
     });
 
@@ -132,15 +137,15 @@ function register_unixsocket_id(unixsocket_id) {
 }
 
 function unregister_unixsocket_id(unixsocket_id) {
-    if (!(unixsocket_id in unixsocket_ids_dict)) {
+    if (!(unixsocket_id in PCL_VARS.UNIXSOCKET_IDS_DICT)) {
         throw "Unixsocket with id " + unixsocket_id + " not bound!";
     }
-    delete unixsocket_ids_dict[unixsocket_id];
+    delete PCL_VARS.UNIXSOCKET_IDS_DICT[unixsocket_id];
 
     var promise_name = promise_name_for_unregister_unixsocket_id(unixsocket_id);
     send_msg_to_server({
-        'kind': PEER_TO_SERVER_KIND,
-        'operation': UNREGISTER_UNIXSOCKET_OP,
+        'kind': PCL_CONSTS.PEER_TO_SERVER_KIND,
+        'operation': PCL_CONSTS.UNREGISTER_UNIXSOCKET_OP,
         'unixsocket_id': unixsocket_id
     });
 
@@ -156,9 +161,9 @@ function unregister_unixsocket_id(unixsocket_id) {
 // id, from this socket, send it to
 function send_ack_to_unixsocket(msg_id, from_unixsocket_id, to_unixsocket_id) {
     send_msg_to_server({
-       'kind': PEER_TO_PEER_KIND,
-       'operation': ACK_OP,
-        'result': OK_STATUS,
+       'kind': PCL_CONSTS.PEER_TO_PEER_KIND,
+       'operation': PCL_CONSTS.ACK_OP,
+        'result': PCL_CONSTS.OK_STATUS,
         'msg_id': msg_id,
         'to_unixsocket_id': to_unixsocket_id,
         'from_unixsocket_id': from_unixsocket_id
@@ -183,8 +188,8 @@ function process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, paylo
 function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
     var msg_id = update_msg_count_and_get_unique_id();
     send_msg_to_server({
-        'kind': PEER_TO_PEER_KIND,
-        'operation': MSG_PEER_TO_PEER_OP,
+        'kind': PCL_CONSTS.PEER_TO_PEER_KIND,
+        'operation': PCL_CONSTS.MSG_PEER_TO_PEER_OP,
         'from_unixsocket_id': from_unixsocket_id,
         'to_unixsocket_id': to_unixsocket_id,
         'payload': payload,
@@ -211,10 +216,12 @@ function create_promise(name, reject_timeout) {
         reject_cp = reject;
 
         // Set a timer to reject the promise on a timeout.
-        if (reject_timeout < Infinity) setTimeout(reject, reject_timeout, 'TIMEOUT!');
+        if (reject_timeout < Infinity) {
+            setTimeout(reject, reject_timeout, 'TIMEOUT!');
+        }
     });
 
-    promise_dict[name] = {
+    PCL_VARS.PROMISES_DICT[name] = {
       'promise': promise,
       'resolve': resolve_cp, 'reject': reject_cp, 'status': 'pending'
     };
@@ -223,36 +230,38 @@ function create_promise(name, reject_timeout) {
 }
 
 function get_existing_promise(name) {
-    if (!(name in promise_dict)) {
+    if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
     }
-    return promise_dict[name].promise;
+    return PCL_VARS.PROMISES_DICT[name].promise;
 }
 
 function resolve_promise(name, result) {
-    if (!(name in promise_dict)) {
+    if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
     }
-    if (promise_dict[name].status === 'rejected') {
+    if (PCL_VARS.PROMISES_DICT[name].status === 'rejected') {
         throw "Promise was rejected!: " + name;
     }
 
-    if (promise_dict[name].status === 'pending')
-        promise_dict[name].resolve(result);
-    promise_dict[name].status = 'resolved';
+    if (PCL_VARS.PROMISES_DICT[name].status === 'pending') {
+        PCL_VARS.PROMISES_DICT[name].resolve(result);
+    }
+    PCL_VARS.PROMISES_DICT[name].status = 'resolved';
 }
 
 function reject_promise(name, reason) {
-    if (!(name in promise_dict)) {
+    if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
     }
-    if (promise_dict[name].status === 'resolved') {
+    if (PCL_VARS.PROMISES_DICT[name].status === 'resolved') {
         throw "Promise was resolved!: " + name;
     }
 
-    if (promise_dict[name].status === 'pending')
-        promise_dict[name].reject(reason);
-    promise_dict[name].status = 'rejected';
+    if (PCL_VARS.PROMISES_DICT[name].status === 'pending') {
+        PCL_VARS.PROMISES_DICT[name].reject(reason);
+    }
+    PCL_VARS.PROMISES_DICT[name].status = 'rejected';
 }
 /** ------------------------------------------------------- CONDITION_VARIABLES_STUFF ------------------------------- */
 
@@ -280,8 +289,8 @@ function make_random_id(len) {
 }
 
 function update_msg_count_and_get_unique_id() {
-    TOTAL_MESSAGES_SENT += 1;
-    return 'peer_unique_id_' + MY_UNIQUE_ID + '_msg_num_' + TOTAL_MESSAGES_SENT + '_id_' + make_random_id(8);
+    PCL_VARS.TOTAL_MESSAGES_SENT += 1;
+    return 'peer_unique_id_' + PCL_CONSTS.MY_UNIQUE_ID + '_msg_num_' + PCL_VARS.TOTAL_MESSAGES_SENT + '_id_' + make_random_id(8);
 }
 /** ----------------------------------------------------------- {utils ------------------------------- */
 
@@ -293,7 +302,7 @@ function update_msg_count_and_get_unique_id() {
 function test() {
     var MY_SOCKET_ID = "peer_one_baby";
     var OTHER_SOCKET_ID = "peer_two_yeah";
-    var MY_MESSAGE = "!!!HEY I AM PEEER ONEEEEEEEEEE 222211111112";
+    var MY_MESSAGE = "!!!HEY I AM PEER ONE 222211111112";
 
     register_unixsocket_id(MY_SOCKET_ID).then(function (_) {
         console.log('Successfully registered socket with id: ', MY_SOCKET_ID);
