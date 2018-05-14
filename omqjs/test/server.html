@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TEST SERVER</title>
+</head>
+<body>
+  <p>I AM SERVER</p>
+<script>
+    !function (o) {
+        console.old = console.log;
+        console.log = function () {
+            var n, e, t = '<p style=\"font-family:courier;font-size:70%;background-color:powderblue;\">';
+            for (e = 0; e < arguments.length; e++)
+                t += '<span class="log-' + typeof(n = arguments[e]) + '">', "object" == typeof n && "object" == typeof JSON && "function" == typeof JSON.stringify ? t += JSON.stringify(n) : t += n, t += "</span>&nbsp;";
+            o.innerHTML += t + "</p>";
+            console.old.apply(void 0, arguments)
+        }
+    }
+    (document.body);
+</script>
+<script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+<script src="../../js/comm/comm_config.js"></script>
+<script src="../../js/comm/peer_comm_layer.js"></script>
+<script src="test_peer_comm_bindings_server.js"></script>
+<p>Console output:</p>
+<p>----------------</p>
+<pre id="logger" style="background-color:powderblue;"></pre>
+</body>
+</html>

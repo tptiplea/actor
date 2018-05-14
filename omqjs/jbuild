@@ -1,0 +1,31 @@
+(jbuild_version 1)
+
+(library
+ ((public_name omqjs)
+  (name        omqjs)
+
+  (wrapped false)
+
+  (modes (byte))
+  (preprocess (pps (lwt_ppx)))
+  (modules (:standard \ (test_peer_comm_bindings_server test_peer_comm_bindings_client)))
+  (libraries (
+    js_of_ocaml
+    js_of_ocaml-lwt
+    lwt
+))))
+
+(executables
+ ((public_names (test_peer_comm_bindings_server test_peer_comm_bindings_client))
+  (names        (test_peer_comm_bindings_server test_peer_comm_bindings_client))
+  (package omqjs)
+
+  (modes (byte))
+  (preprocess (pps (lwt_ppx)))
+  (modules (test_peer_comm_bindings_server test_peer_comm_bindings_client))
+  (libraries (
+    omqjs
+    lwt
+    js_of_ocaml
+    js_of_ocaml-lwt
+))))
