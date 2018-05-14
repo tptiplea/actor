@@ -1,6 +1,8 @@
 //* CONSTANTS **////
+// Provides: PCL_CONSTS
+// Requires: make_random_id
 const PCL_CONSTS = {
-    MY_UNIQUE_ID : make_random_id(10),
+    MY_UNIQUE_ID : make_random_id(20),
     SERVER_TO_PEER_KIND : 'SERVER_TO_PEER',
     PEER_TO_SERVER_KIND : 'PEER_TO_SERVER',
     PEER_TO_PEER_KIND : 'PEER_TO_PEER',
@@ -23,8 +25,10 @@ const PCL_CONSTS = {
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
+// Provides: PCL_VARS
 var PCL_VARS = {
-    IOSOCKET : io(SIGNALLING_SERVER_URL),
+    SIGNALLING_SERVER_URL : undefined,
+    IOSOCKET : undefined,
     TOTAL_MESSAGES_SENT : 0,
     UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
     PROMISES_DICT : {}, // keep track of promises
@@ -34,18 +38,29 @@ var PCL_VARS = {
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 
-// Connect to server.
-PCL_VARS.IOSOCKET.on('server_to_peer', process_msg_from_server);
+// Starts the PCL layer, must be called before any other function.
+// Provides: start_pcl_layer
+// Requires: PCL_VARS, PCL_CONSTS, create_promise, get_existing_promise
+function start_pcl_layer(signalling_server_url) {
+    PCL_VARS.SIGNALLING_SERVER_URL = signalling_server_url;
+    PCL_VARS.IOSOCKET = io(signalling_server_url);
 
-// The semaphore that tells us whether we're connected to the server.
-create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
-get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
-    console.log('CONNECTED TO IO SERVER, got id:', PCL_CONSTS.MY_UNIQUE_ID);
-});
+    // Connect to server.
+    PCL_VARS.IOSOCKET.on('server_to_peer', process_msg_from_server);
+
+    // The semaphore that tells us whether we're connected to the server.
+    create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
+    get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
+        console.log('CONNECTED TO IO SERVER, got id:', PCL_CONSTS.MY_UNIQUE_ID);
+    });
+}
+
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {IOSOCKET send stuff ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 // Send a msg to server, return a promise after that is done.
+// Provides: send_msg_to_server
+// Requires: PCL_VARS, PCL_CONSTS, get_existing_promise
 function send_msg_to_server(msg) {
     return get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
         PCL_VARS.IOSOCKET.emit('peer_to_server', msg);
@@ -56,6 +71,8 @@ function send_msg_to_server(msg) {
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {IOSOCKET receive stuff ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
+// Provides: process_msg_from_server
+// Requires: PCL_VARS, PCL_CONSTS, promise_name_for_register_unixsocket_id, promise_name_for_unregister_unixsocket_id, resolve_promise, reject_promise, promise_name_from_msg_id_ack, process_msg_from_unixsocket
 function process_msg_from_server(msg) {
     if (msg.kind === PCL_CONSTS.SERVER_TO_PEER_KIND) {
         // A message from the server.
@@ -120,9 +137,13 @@ function process_msg_from_server(msg) {
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ REGISTER/UNREGISTER UNIXSOCKETS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+// Register a unixsocket_id, with this peer and the signalling server.
+// Returns a promise resolved when the address is bound correctly.
+// Provides: register_unixsocket_id
+// Requires: PCL_VARS, PCL_CONSTS, promise_name_for_register_unixsocket_id, send_msg_to_server, log_error, create_promise
 function register_unixsocket_id(unixsocket_id) {
     if (unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT) {
-        throw "Unixsocket with id " + unixsocket_id + " already bound";
+        return Promise.reject("Unixsocket with id " + unixsocket_id + " already bound");
     }
     PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id] = {}; // all the sockets we are connected to.
     PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id] = {
@@ -131,40 +152,54 @@ function register_unixsocket_id(unixsocket_id) {
     };
 
     var promise_name = promise_name_for_register_unixsocket_id(unixsocket_id);
-    send_msg_to_server({
+    var promise = create_promise(promise_name, 120 * 1000);
+    return send_msg_to_server({
         'kind': PCL_CONSTS.PEER_TO_SERVER_KIND,
         'operation': PCL_CONSTS.REGISTER_UNIXSOCKET_OP,
         'unixsocket_id': unixsocket_id
+    }).then(function (_) {
+        return promise;
+    }).catch(function (reason) {
+        delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
+        delete PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id];
+        log_error(reason);
+        throw reason; // Pass the error forward
     });
-
-    return create_promise(promise_name, 120 * 1000);
 }
 
+// Provides: unregister_unixsocket_id
+// Requires: PCL_VARS, PCL_CONSTS, promise_name_for_unregister_unixsocket_id, send_msg_to_server, log_error, create_promise
 function unregister_unixsocket_id(unixsocket_id) {
     if (!(unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)) {
-        throw "Unixsocket with id " + unixsocket_id + " not bound!";
+        return Promise.reject("Unixsocket with id " + unixsocket_id + " not bound!");
     }
     delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
 
     var promise_name = promise_name_for_unregister_unixsocket_id(unixsocket_id);
-    send_msg_to_server({
+    var promise = create_promise(promise_name, 120 * 1000);
+    return send_msg_to_server({
         'kind': PCL_CONSTS.PEER_TO_SERVER_KIND,
         'operation': PCL_CONSTS.UNREGISTER_UNIXSOCKET_OP,
         'unixsocket_id': unixsocket_id
+    }).then(function (_) {
+        return promise;
     });
-
-    return create_promise(promise_name, 120 * 1000);
 }
 
 
 /** --------------------------- REGISTER/UNREGISTER UNIXSOCKETS --------------------------------------------- */
 
 
-/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PEER_TO_PEER_MSG ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PEER_TO_PEER_MSG (SIGNALLING) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PEER_TO_PEER_MSG (SIGNALLING) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PEER_TO_PEER_MSG (SIGNALLING) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 
 // id, from this socket, send it to
+// Sends an ack to the other unixsocket_id over the signalling channel
+// Provides: send_ack_to_unixsocket
+// Requires: PCL_VARS, PCL_CONSTS, send_msg_to_server
 function send_ack_to_unixsocket(msg_id, from_unixsocket_id, to_unixsocket_id) {
-    send_msg_to_server({
+    return send_msg_to_server({
        'kind': PCL_CONSTS.PEER_TO_PEER_KIND,
        'operation': PCL_CONSTS.ACK_OP,
         'result': PCL_CONSTS.OK_STATUS,
@@ -174,10 +209,12 @@ function send_ack_to_unixsocket(msg_id, from_unixsocket_id, to_unixsocket_id) {
     });
 }
 
+// Processes a message received over the signalling channel.
+// Provides: process_msg_from_unixsocket
+// Requires: PCL_VARS, PCL_CONSTS, send_ack_to_unixsocket, set_up_rtcpeerconnection, send_msg_to_unixsocket, log_error
 function process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, payload, msg_id) {
     if (!(to_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)) {
-        console.log('ERROR!!!: Got a message for an unregistered unixsocket_id, dropping it.');
-        throw "Message for UNREGISTERED UNIXSOCKET ID";
+        log_error('ERROR!!!: Got a message for an unregistered unixsocket_id' + 'to_unixsocket_id' + '. Dropping it.');
     }
     // Pretty much always ack the message first.
     var other_unixsocket_id = from_unixsocket_id; // to other
@@ -226,6 +263,9 @@ function process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, paylo
     }
 }
 
+// Send a message over the signalling channel.
+// Provides: send_msg_to_unixsocket
+// Requires: PCL_VARS, PCL_CONSTS, send_msg_to_server, create_promise, update_msg_count_and_get_unique_id, promise_name_from_msg_id_ack
 function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
     var msg_id = update_msg_count_and_get_unique_id();
     send_msg_to_server({
@@ -252,10 +292,13 @@ function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
 
 // Set up an RTCPeerConnection and a DataChannel between these two sockets.
 // Returns a promise resolved when the data channel is open.
+// Provides: set_up_rtc_peerconnection
+// Requires: PCL_VARS, PCL_CONSTS, send_msg_to_unixsocket, rtc_process_received_message, add_timeout_to_promise, log_warning
 function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_caller) {
     var resolver = null;
+    var rejector = null;
     var open_channel_promise = add_timeout_to_promise(
-        new Promise(function (resolve, _) {resolver = resolve;}),
+        new Promise(function (resolve, reject) {resolver = resolve; rejector = reject;}),
         60 * 1000,
         'Setting up the RTCPeerConnecton timed-out');
 
@@ -286,10 +329,16 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
                 'description' : pc.localDescription
             })
 
-        }).catch(log_error);
+        }).catch(function (reason) {
+            log_error(reason);
+            rejector(reason); // Fail the other promise
+        });
     };
 
     function add_listeners_on_channel(channel) {
+        if (!channel.reliable) {
+            log_warning('Channel between ' + me_unixsocket_id + ' and ' + other_unixsocket_id ' is not reliable!');
+        }
         channel.onopen = function (_) {
             resolver(channel); // resolve the promise when we get the channel open.
         };
@@ -319,6 +368,10 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
 }
 
 // Connect to this socket.
+// Returns a promise that resolves to the from_unixsocket_id that is connected (listening) to this other remote peer.
+// This will be a new socket.
+// Provides: connect_to_unixsocket
+// Requires: PCL_VARS, PCL_CONSTS, get_unused_unixsocket_id, register_unixsocket_id, set_up_rtcpeerconnection
 function connect_to_unixsocket(to_unixsocket_id) {
     var from_unixsocket_id = get_unused_unixsocket_id();
     // This will contain the result of the connection, either the from_unixsocket_id connected to this
@@ -346,6 +399,8 @@ function connect_to_unixsocket(to_unixsocket_id) {
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ WEBRTC_SEND_RECV ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 
 // Process a message received over the RTC channel
+// Provides: rtc_process_received_message
+// Requires: PCL_VARS, PCL_CONSTS
 function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg) {
     var msg_with_src = {
         'msg': msg,
@@ -362,11 +417,14 @@ function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg)
 }
 
 // Send a message over the rtc channel.
+// Returns a promise that resolves when the channel is open and the message was sent.
+// Provides: rtc_send_msg
+// Requires: PCL_VARS, PCL_CONSTS
 function rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg) {
     if (!(to_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[from_unixsocket_id])) {
         var error_msg = "ERROR: " + "The local socket -" + from_unixsocket_id +
             "- is not connected to remote socket-" + to_unixsocket_id + "!";
-        console.log(error_msg);
+        log_error(error_msg);
         return Promise.reject(error_msg);
     }
 
@@ -377,6 +435,9 @@ function rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg) {
     });
 }
 
+// Returns a promise that resolves to an {from_unixsocket_id: _, msg: _} object.
+// Provides: rtc_get_msg_sync
+// Requires: PCL_VARS, PCL_CONSTS, add_timeout_to_promise
 function rtc_get_msg_sync(unixsocket_id) {
     if (!(unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q)) {
         var err_msg = "Unixsocket with id:" + unixsocket_id + "not registered with server.";
@@ -396,12 +457,26 @@ function rtc_get_msg_sync(unixsocket_id) {
     }
 }
 
+// Function that calls the first callback with on_msg_callback(from_unixsocket_id, msg) when the message is available.
+// If an error occurs, the other callback is called with on_error_callback(reason).
+// Provides: rtc_get_msg_with_callback
+// Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
+function rtc_get_msg_with_callback(unixsocket_id, on_msg_callback, on_error_callback) {
+    rtc_get_msg_sync(unixsocket_id).then(function (res) {
+        on_msg_callback(res.from_unixsocket_id, res.msg);
+    }).catch(function (reason) {
+       on_error_callback(reason);
+    });
+}
+
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONDITION_VARIABLES_STUFF ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+// Provides: create_promise
+// Requires: PCL_VARS, PCL_CONSTS
 function create_promise(name, reject_timeout) {
     reject_timeout = typeof reject_timeout !== 'undefined' ? reject_timeout : Infinity; // by default, no timeout
 
@@ -431,6 +506,8 @@ function create_promise(name, reject_timeout) {
     return promise;
 }
 
+// Provides: get_existing_promise
+// Requires: PCL_VARS, PCL_CONSTS
 function get_existing_promise(name) {
     if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
@@ -438,6 +515,8 @@ function get_existing_promise(name) {
     return PCL_VARS.PROMISES_DICT[name].promise;
 }
 
+// Provides: resolve_promise
+// Requires: PCL_VARS, PCL_CONSTS
 function resolve_promise(name, result) {
     if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
@@ -452,6 +531,8 @@ function resolve_promise(name, result) {
     PCL_VARS.PROMISES_DICT[name].status = 'resolved';
 }
 
+// Provides: reject_promise
+// Requires: PCL_VARS, PCL_CONSTS
 function reject_promise(name, reason) {
     if (!(name in PCL_VARS.PROMISES_DICT)) {
         throw "Promise does not exist " + name;
@@ -468,6 +549,8 @@ function reject_promise(name, reason) {
 /** ------------------------------------------------------- CONDITION_VARIABLES_STUFF ------------------------------- */
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {utils ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+// Provides: add_timeout_to_promise
+// Requires: PCL_VARS, PCL_CONSTS
 function add_timeout_to_promise(promise, timeout, msg) {
     return Promise.race([promise,
         new Promise(function (_, reject) {
@@ -479,18 +562,26 @@ function add_timeout_to_promise(promise, timeout, msg) {
         })]);
 }
 
+// Provides: promise_name_for_register_unixsocket_id
+// Requires: PCL_VARS, PCL_CONSTS
 function promise_name_for_register_unixsocket_id(unixsocket_id) {
     return "promise_register_unixsocket_id_" + unixsocket_id;
 }
 
+// Provides: promise_name_for_unregister_unixsocket_id
+// Requires: PCL_VARS, PCL_CONSTS
 function promise_name_for_unregister_unixsocket_id(unixsocket_id) {
     return "promise_unregister_unixsocket_id_" + unixsocket_id;
 }
 
+// Provides: promise_name_from_msg_id_ack
+// Requires: PCL_VARS, PCL_CONSTS
 function promise_name_from_msg_id_ack(msg_id) {
     return "promise_ack_for_msg_id_" + msg_id;
 }
 
+// Provides: make_random_id
+// Requires: PCL_VARS, PCL_CONSTS
 function make_random_id(len) {
     var id = "";
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -501,11 +592,15 @@ function make_random_id(len) {
     return id;
 }
 
+// Provides: update_msg_count_and_get_unique_id
+// Requires: PCL_VARS, PCL_CONSTS, make_random_id
 function update_msg_count_and_get_unique_id() {
     PCL_VARS.TOTAL_MESSAGES_SENT += 1;
     return 'peer_unique_id_' + PCL_CONSTS.MY_UNIQUE_ID + '_msg_num_' + PCL_VARS.TOTAL_MESSAGES_SENT + '_id_' + make_random_id(8);
 }
 
+// Provides: get_unused_unixsocket_id
+// Requires: PCL_VARS, PCL_CONSTS, make_random_id
 function get_unused_unixsocket_id() {
     var _unixsocket_id = "none";
     do {
@@ -514,11 +609,22 @@ function get_unused_unixsocket_id() {
     return _unixsocket_id;
 }
 
+// Provides: log_error
+// Requires: PCL_VARS, PCL_CONSTS
 function log_error(error) {
-    console.log("\n\n----------------");
-    console.log("Got an error:");
+    console.log("%c \n\n----------------", "color: red");
+    console.log("%c Got an error:", "color: red");
     console.log(error);
-    console.log("----------------\n\n");
+    console.log("%c ----------------\n\n", "color: red");
+}
+
+// Provides: log_warning
+// Requires: PCL_VARS, PCL_CONSTS
+function log_warning(warning) {
+    console.log("%c \n\n----------------", "color: yellow");
+    console.log("%c Got a warning:", "color: yellow");
+    console.log(error);
+    console.log("%c ----------------\n\n", "color: yellow");
 }
 /** ----------------------------------------------------------- {utils ------------------------------- */
 
@@ -528,6 +634,7 @@ function log_error(error) {
 // -------------------------------------------------------------- ******* TEST ******* //
 
 function test() {
+    start_pcl_layer(SIGNALLING_SERVER_URL);
     var MY_SOCKET_ID = "peer_one_baby";
     var OTHER_SOCKET_ID = "peer_two_yeah";
     var MY_MESSAGE = "!!!HEY I AM PEER ONE 222211111112";
@@ -548,6 +655,7 @@ function test() {
 }
 
 function test2() {
+    start_pcl_layer(SIGNALLING_SERVER_URL);
     var am_server = true;
     var SERVER_SOCKET_ID = "unixsocket_for_server";
 
