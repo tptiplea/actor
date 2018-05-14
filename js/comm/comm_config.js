@@ -6,6 +6,8 @@ const WEBRTC_CONFIGURATION = {
         {"urls": ["stun:stun3.l.google.com:19302"]},
         {"urls": ["stun:stun4.l.google.com:19302"]}
     ],
-    "iceTransportPolicy": "all",  // TODO: if it doesn't connect, maybe try changing this to all
+    "iceTransportPolicy": "all",
     "iceCandidatePoolSize": "0"
 };
+
+const SIGNALLING_SERVER_URL = "http://localhost:3000";  // TODO: add the server URL here

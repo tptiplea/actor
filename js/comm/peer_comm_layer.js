@@ -1,6 +1,3 @@
-const SERVER_URL = "http://localhost:3000";  // TODO: add the server URL here
-
-
 //* CONSTANTS **////
 const PCL_CONSTS = {
     MY_UNIQUE_ID : make_random_id(10),
@@ -27,7 +24,7 @@ const PCL_CONSTS = {
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
 var PCL_VARS = {
-    IOSOCKET : io(SERVER_URL),
+    IOSOCKET : io(SIGNALLING_SERVER_URL),
     TOTAL_MESSAGES_SENT : 0,
     UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
     PROMISES_DICT : {}, // keep track of promises
