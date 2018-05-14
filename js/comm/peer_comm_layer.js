@@ -39,6 +39,7 @@ var PCL_VARS = {
 ////**************************************************************** VARIABLES **********************************
 
 // Starts the PCL layer, must be called before any other function.
+// Returns a promise which is resolved with the unique id of this program when connected to signalling server.
 // Provides: start_pcl_layer
 // Requires: PCL_VARS, PCL_CONSTS, create_promise, get_existing_promise
 function start_pcl_layer(signalling_server_url) {
@@ -50,8 +51,9 @@ function start_pcl_layer(signalling_server_url) {
 
     // The semaphore that tells us whether we're connected to the server.
     create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
-    get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
+    return get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
         console.log('CONNECTED TO IO SERVER, got id:', PCL_CONSTS.MY_UNIQUE_ID);
+        return PCL_CONSTS.MY_UNIQUE_ID;
     });
 }
 
@@ -337,14 +339,14 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
 
     function add_listeners_on_channel(channel) {
         if (!channel.reliable) {
-            log_warning('Channel between ' + me_unixsocket_id + ' and ' + other_unixsocket_id ' is not reliable!');
+            log_warning('Channel between ' + me_unixsocket_id + ' and ' + other_unixsocket_id + ' is not reliable!');
         }
         channel.onopen = function (_) {
             resolver(channel); // resolve the promise when we get the channel open.
         };
 
         channel.onclose = function (_) {
-            console.log('Datachannel between', other_unixsocket_id, 'and', me_unixsocket_id, 'has closed down');
+            log_warning('Datachannel between' + other_unixsocket_id + 'and' + me_unixsocket_id + 'has closed down');
         };
 
         channel.onmessage = function (event) {
@@ -456,23 +458,93 @@ function rtc_get_msg_sync(unixsocket_id) {
         return Promise.resolve(msg);
     }
 }
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 
-// Function that calls the first callback with on_msg_callback(from_unixsocket_id, msg) when the message is available.
-// If an error occurs, the other callback is called with on_error_callback(reason).
-// Provides: rtc_get_msg_with_callback
-// Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
-function rtc_get_msg_with_callback(unixsocket_id, on_msg_callback, on_error_callback) {
-    rtc_get_msg_sync(unixsocket_id).then(function (res) {
-        on_msg_callback(res.from_unixsocket_id, res.msg);
+
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+
+// Function that starts the communication layer and calls the callback when connected to the signalling server.
+// The callback is passed the Unique ID of this peer.
+// Needs the signalling server URL as the first argument.
+// Provides: pcl_api_start_comm_layer
+// Requires: start_pcl_layer
+function pcl_api_start_comm_layer(signalling_server_url, on_success_callback, on_failure_callback) {
+    start_pcl_layer(signalling_server_url).then(function (unique_id) {
+        on_success_callback(unique_id);
     }).catch(function (reason) {
-       on_error_callback(reason);
+        on_failure_callback(reason);
     });
 }
 
-/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
-/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
-/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+// Function that binds an address (must be unique),
+// calling the on_success_callback on success, or the failure_callback with the reason on fail.
+// Provides: pcl_api_bind_address
+// Requires: register_unixsocket_id
+function pcl_api_bind_address(unixsocket_id, on_success_callback, on_failure_callback) {
+    register_unixsocket_id(unixsocket_id).then(function (_) {
+        on_success_callback();
+    }).catch(function (reason) {
+        on_failure_callback(reason);
+    });
+}
 
+// Function that unbinds an address (must be already registered),
+// calling the on_success_callback on success, or the failure_callback with the reason on fail.
+// Provides: pcl_api_unbind_address
+// Requires: unregister_unixsocket_id
+function pcl_api_unbind_address(unixsocket_id, on_success_callback, on_failure_callback) {
+    unregister_unixsocket_id(unixsocket_id).then(function (_) {
+        on_success_callback();
+    }).catch(function (reason) {
+        on_failure_callback(reason);
+    });
+}
+
+// Function that connects to an address.
+// It calls the on_success_callback with the unixsocket_id we are connected with to that address,
+// or the failure_callback if some error occurred.
+// Provide: pcl_api_connect_to_address
+// Requires: connect_to_unixsocket
+function pcl_api_connect_to_address(to_unixsocket_id, on_success_callback, on_failure_callback) {
+    connect_to_unixsocket(to_unixsocket_id).then(function (from_unixsocket_id) {
+        on_success_callback(from_unixsocket_id);
+    }).catch(function (reason) {
+        on_failure_callback(reason);
+    });
+}
+
+// Function that sends a message from a unixsocket A to another unixsocket B.
+// It must be that A and B are connected, either by A being the result of a connect_to_address(B) operation (then this is a client)
+// or B is a client that connected to our socket A. (then this is the server)
+// Provides: pcl_api_send_msg
+// Requires: PCL_VARS, PCL_CONSTS,
+function pcl_api_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_success_callback, on_failure_callback) {
+    rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg).then(function (_) {
+        on_success_callback();
+    }).catch(function (reason) {
+        on_failure_callback(reason);
+    });
+}
+
+// Function that calls the first callback with on_success_callback(from_unixsocket_id, msg) when the message is available.
+// If an error occurs, the other callback is called with on_failure_callback(reason).
+// Provides: pcl_api_recv_msg
+// Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
+function pcl_api_recv_msg(unixsocket_id, on_success_callback, on_failure_callback) {
+    rtc_get_msg_sync(unixsocket_id).then(function (res) {
+        on_success_callback(res.from_unixsocket_id, res.msg);
+    }).catch(function (reason) {
+        on_failure_callback(reason);
+    });
+}
+
+/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
+/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
+/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONDITION_VARIABLES_STUFF ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 // Provides: create_promise
@@ -623,7 +695,7 @@ function log_error(error) {
 function log_warning(warning) {
     console.log("%c \n\n----------------", "color: yellow");
     console.log("%c Got a warning:", "color: yellow");
-    console.log(error);
+    console.log(warning);
     console.log("%c ----------------\n\n", "color: yellow");
 }
 /** ----------------------------------------------------------- {utils ------------------------------- */
@@ -632,8 +704,7 @@ function log_warning(warning) {
 
 
 // -------------------------------------------------------------- ******* TEST ******* //
-
-function test() {
+function __pcljs_test() {
     start_pcl_layer(SIGNALLING_SERVER_URL);
     var MY_SOCKET_ID = "peer_one_baby";
     var OTHER_SOCKET_ID = "peer_two_yeah";
@@ -654,7 +725,7 @@ function test() {
     }, function (reason) { console.log('Failed to register unixsocket_id', MY_SOCKET_ID, 'with reason', reason); });
 }
 
-function test2() {
+function __pcljs_test2() {
     start_pcl_layer(SIGNALLING_SERVER_URL);
     var am_server = true;
     var SERVER_SOCKET_ID = "unixsocket_for_server";
@@ -691,7 +762,4 @@ function test2() {
         }).catch(log_error);
     }
 }
-
-test2();
-
 // ---------------------------------------------------------------------- TEST
