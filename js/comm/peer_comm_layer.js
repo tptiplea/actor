@@ -463,16 +463,16 @@ function rtc_get_msg_sync(unixsocket_id) {
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 
 
-/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
-/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
-/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ API WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ jsapi WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ jsapi WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ jsapi WITH CALLBACKS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 
 // Function that starts the communication layer and calls the callback when connected to the signalling server.
 // The callback is passed the Unique ID of this peer.
 // Needs the signalling server URL as the first argument.
-// Provides: pcl_api_start_comm_layer
+// Provides: pcl_jsapi_start_comm_layer
 // Requires: start_pcl_layer
-function pcl_api_start_comm_layer(signalling_server_url, on_success_callback, on_failure_callback) {
+function pcl_jsapi_start_comm_layer(signalling_server_url, on_success_callback, on_failure_callback) {
     start_pcl_layer(signalling_server_url).then(function (unique_id) {
         on_success_callback(unique_id);
     }).catch(function (reason) {
@@ -482,9 +482,9 @@ function pcl_api_start_comm_layer(signalling_server_url, on_success_callback, on
 
 // Function that binds an address (must be unique),
 // calling the on_success_callback on success, or the failure_callback with the reason on fail.
-// Provides: pcl_api_bind_address
+// Provides: pcl_jsapi_bind_address
 // Requires: register_unixsocket_id
-function pcl_api_bind_address(unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_bind_address(unixsocket_id, on_success_callback, on_failure_callback) {
     register_unixsocket_id(unixsocket_id).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
@@ -494,9 +494,9 @@ function pcl_api_bind_address(unixsocket_id, on_success_callback, on_failure_cal
 
 // Function that unbinds an address (must be already registered),
 // calling the on_success_callback on success, or the failure_callback with the reason on fail.
-// Provides: pcl_api_unbind_address
+// Provides: pcl_jsapi_unbind_address
 // Requires: unregister_unixsocket_id
-function pcl_api_unbind_address(unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_unbind_address(unixsocket_id, on_success_callback, on_failure_callback) {
     unregister_unixsocket_id(unixsocket_id).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
@@ -507,9 +507,9 @@ function pcl_api_unbind_address(unixsocket_id, on_success_callback, on_failure_c
 // Function that connects to an address.
 // It calls the on_success_callback with the unixsocket_id we are connected with to that address,
 // or the failure_callback if some error occurred.
-// Provide: pcl_api_connect_to_address
+// Provide: pcl_jsapi_connect_to_address
 // Requires: connect_to_unixsocket
-function pcl_api_connect_to_address(to_unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_connect_to_address(to_unixsocket_id, on_success_callback, on_failure_callback) {
     connect_to_unixsocket(to_unixsocket_id).then(function (from_unixsocket_id) {
         on_success_callback(from_unixsocket_id);
     }).catch(function (reason) {
@@ -520,9 +520,9 @@ function pcl_api_connect_to_address(to_unixsocket_id, on_success_callback, on_fa
 // Function that sends a message from a unixsocket A to another unixsocket B.
 // It must be that A and B are connected, either by A being the result of a connect_to_address(B) operation (then this is a client)
 // or B is a client that connected to our socket A. (then this is the server)
-// Provides: pcl_api_send_msg
+// Provides: pcl_jsapi_send_msg
 // Requires: PCL_VARS, PCL_CONSTS,
-function pcl_api_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_success_callback, on_failure_callback) {
+function pcl_jsapi_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_success_callback, on_failure_callback) {
     rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
@@ -532,9 +532,9 @@ function pcl_api_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_success_
 
 // Function that calls the first callback with on_success_callback(from_unixsocket_id, msg) when the message is available.
 // If an error occurs, the other callback is called with on_failure_callback(reason).
-// Provides: pcl_api_recv_msg
+// Provides: pcl_jsapi_recv_msg
 // Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
-function pcl_api_recv_msg(unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_recv_msg(unixsocket_id, on_success_callback, on_failure_callback) {
     rtc_get_msg_sync(unixsocket_id).then(function (res) {
         on_success_callback(res.from_unixsocket_id, res.msg);
     }).catch(function (reason) {
@@ -542,9 +542,9 @@ function pcl_api_recv_msg(unixsocket_id, on_success_callback, on_failure_callbac
     });
 }
 
-/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
-/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
-/** ------------------------------------------------   API WITH CALLBACKS ------------------------------- */
+/** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
+/** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
+/** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONDITION_VARIABLES_STUFF ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 // Provides: create_promise
