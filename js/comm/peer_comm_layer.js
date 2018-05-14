@@ -29,6 +29,7 @@ const PCL_CONSTS = {
 var PCL_VARS = {
     SIGNALLING_SERVER_URL : undefined,
     IOSOCKET : undefined,
+    _IS_PCL_START_REQUESTED : false,
     TOTAL_MESSAGES_SENT : 0,
     UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
     PROMISES_DICT : {}, // keep track of promises
@@ -43,14 +44,20 @@ var PCL_VARS = {
 // Provides: start_pcl_layer
 // Requires: PCL_VARS, PCL_CONSTS, create_promise, get_existing_promise
 function start_pcl_layer(signalling_server_url) {
-    PCL_VARS.SIGNALLING_SERVER_URL = signalling_server_url;
-    PCL_VARS.IOSOCKET = io(signalling_server_url);
+    if (!PCL_VARS._IS_PCL_START_REQUESTED) {
+        // Only if we didn't request start already.
+        PCL_VARS._IS_PCL_START_REQUESTED = true;
 
-    // Connect to server.
-    PCL_VARS.IOSOCKET.on('server_to_peer', process_msg_from_server);
+        PCL_VARS.SIGNALLING_SERVER_URL = signalling_server_url;
+        PCL_VARS.IOSOCKET = io(signalling_server_url);
 
-    // The semaphore that tells us whether we're connected to the server.
-    create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
+        // Connect to server.
+        PCL_VARS.IOSOCKET.on('server_to_peer', process_msg_from_server);
+
+        // The semaphore that tells us whether we're connected to the server.
+        create_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME, 5 * 60 * 1000); // Timeout if we don't connect to server in that time.
+    }
+
     return get_existing_promise(PCL_CONSTS.CONNECTED_TO_SERVER_PROMISE_NAME).then(function (_) {
         console.log('CONNECTED TO IO SERVER, got id:', PCL_CONSTS.MY_UNIQUE_ID);
         return PCL_CONSTS.MY_UNIQUE_ID;
@@ -292,6 +299,16 @@ function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 
+// Tear down an RTCPeerConnection, if one is available.
+function tear_down_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id) {
+    if (!(me_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)
+        || !(other_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id])) {
+        // no connection, no need for tear down.
+        return;
+    }
+    delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id][other_unixsocket_id];
+}
+
 // Set up an RTCPeerConnection and a DataChannel between these two sockets.
 // Returns a promise resolved when the data channel is open.
 // Provides: set_up_rtc_peerconnection
@@ -347,6 +364,7 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
 
         channel.onclose = function (_) {
             log_warning('Datachannel between' + other_unixsocket_id + 'and' + me_unixsocket_id + 'has closed down');
+            tear_down_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id);
         };
 
         channel.onmessage = function (event) {
@@ -366,7 +384,11 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
         };
     }
 
-    return open_channel_promise;
+    return open_channel_promise.catch(function (reason) {
+        // Make sure to teardown the connection here.
+        tear_down_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id);
+        throw reason; // But pass the error forward.
+    });
 }
 
 // Connect to this socket.
@@ -492,11 +514,11 @@ function pcl_jsapi_bind_address(unixsocket_id, on_success_callback, on_failure_c
     });
 }
 
-// Function that unbinds an address (must be already registered),
+// Function that deallocates an address (must be already registered),
 // calling the on_success_callback on success, or the failure_callback with the reason on fail.
-// Provides: pcl_jsapi_unbind_address
+// Provides: pcl_jsapi_deallocate_address
 // Requires: unregister_unixsocket_id
-function pcl_jsapi_unbind_address(unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_deallocate_address(unixsocket_id, on_success_callback, on_failure_callback) {
     unregister_unixsocket_id(unixsocket_id).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
@@ -687,6 +709,9 @@ function log_error(error) {
     console.log("%c \n\n----------------", "color: red");
     console.log("%c Got an error:", "color: red");
     console.log(error);
+    if (typeof error !== 'undefined' && typeof error.stack !== 'undefined') {
+        console.log(error.stack);
+    }
     console.log("%c ----------------\n\n", "color: red");
 }
 
