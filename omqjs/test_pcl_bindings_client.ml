@@ -1,5 +1,5 @@
-module PCLB = Peer_comm_bindings
-module PCConf = Peer_comm_config
+module PCLB = Pcl_bindings
+module PCConf = Pcl_config
 
 let fail_callback = PCConf._test_general_fail_callback "CLIENT"
 
@@ -23,7 +23,7 @@ let sent_message_to_test_server local_scket () =
 
 
 let connected_to_test_server local_scket =
-  let str_local_sckt = Peer_comm_bindings.local_sckt_t_to_string local_scket in
+  let str_local_sckt = Pcl_bindings.local_sckt_t_to_string local_scket in
   "CLIENT: Connected to TEST Server with local socket " ^ str_local_sckt ^ "\n" |> print_string;
   PCLB.pcl_send_msg
     local_scket

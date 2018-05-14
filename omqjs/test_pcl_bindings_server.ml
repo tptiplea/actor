@@ -1,5 +1,5 @@
-module PCLB = Peer_comm_bindings
-module PCConf = Peer_comm_config
+module PCLB = Pcl_bindings
+module PCConf = Pcl_config
 
 let fail_callback = PCConf._test_general_fail_callback "SERVER"
 
