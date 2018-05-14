@@ -28,7 +28,7 @@ let process r m =
   | User_Reg -> (
     let uid, addr = m.par.(0), m.par.(1) in
     if Workers.mem uid = false then
-      Printf.fprintf Pervasives.stdout "%s\n" (uid ^ " @ " ^ addr); Pervasives.flush Pervasives.stdout;
+      Owl_log.info "%s\n" (uid ^ " @ " ^ addr);
       Workers.add uid addr;
       Actor_pure_utils.send r OK [||]
     )
@@ -44,22 +44,20 @@ let process r m =
       Actor_pure_utils.send r Job_Worker [|master|]
     )
   | Heartbeat -> (
-    Printf.fprintf Pervasives.stdout "%s\n" ("heartbeat @ " ^ m.par.(0)); Pervasives.flush Pervasives.stdout;
+    Owl_log.info "%s\n" ("heartbeat @ " ^ m.par.(0));
     Workers.add m.par.(0) m.par.(1);
     Actor_pure_utils.send r OK [||]
     )
   | P2P_Reg -> (
     let addr, jid = m.par.(0), m.par.(1) in
-    Printf.fprintf Pervasives.stdout "p2p @ %s job:%s\n" addr jid; Pervasives.flush Pervasives.stdout;
+    Owl_log.info "p2p @ %s job:%s\n" addr jid;
     if Actor_pure_service.mem jid = false then Actor_pure_service.add jid "";
     let peers = Actor_pure_service.choose_workers jid 10 in
     let peers = Marshal.to_string peers [] in
     Actor_pure_service.add_worker jid addr;
     Actor_pure_utils.send r OK [|peers|]
     )
-  | _ -> Lwt.return (
-    Printf.fprintf Pervasives.stderr "unknown message type\n";  Pervasives.flush Pervasives.stderr
-    )
+  | _ -> Lwt.return (Owl_log.error "unknown message type\n")
 
 let run _id addr =
   let _ztx = Actor_pure_zmq_repl.context_create () in

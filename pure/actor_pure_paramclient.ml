@@ -36,7 +36,7 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
     Actor_pure_utils.send ~bar:t !_context.master_sock PS_Push [|x'|]
 
   let service_loop () =
-    Printf.fprintf Pervasives.stderr "parameter worker @ %s\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+    Owl_log.debug "parameter worker @ %s\n" !_context.myself_addr;
     (* unmarshal the push function *)
     let push : string -> vars_t -> vars_t = !_push in
     (* loop to process messages *)
@@ -45,21 +45,21 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
       let t = m.bar in
       match m.typ with
       | PS_Schedule -> (
-        Printf.fprintf Pervasives.stderr "%s: ps_schedule\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+        Owl_log.debug "%s: ps_schedule\n" !_context.myself_addr;
         !_context.step <- (if t > !_context.step then t else !_context.step);
         let vars = Marshal.from_string m.par.(0) 0 in
         let updates = push !_context.myself_addr vars in
         update_param updates t
         )
         | Terminate -> (
-          Printf.fprintf Pervasives.stderr "%s: terminate\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+          Owl_log.debug "%s: terminate\n" !_context.myself_addr;
           Actor_pure_utils.send ~bar:t !_context.master_sock OK [||];%lwt
           Lwt_unix.sleep 1.0;%lwt (* FIXME: sleep ... *)
           Lwt.return (failwith ("#" ^ !_context.job_id ^ " terminated"))
           )
-        | _ -> Lwt.return ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
+        | _ -> Lwt.return ( Owl_log.debug "unknown mssage to PS\n" )
     done with Failure e -> Lwt.return (
-      Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
+      Owl_log.warn "%s\n" e;
       Actor_pure_zmq_repl.close !_context.myself_sock;
       Pervasives.exit 0 )
 

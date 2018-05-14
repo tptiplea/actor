@@ -67,7 +67,7 @@ let terminate () =
   Lwt_unix.sleep 1. (** FIXME: change to BSP *)
 
 let service_loop () =
-  Printf.fprintf Pervasives.stderr "parameter server @ %s\n" !_context.myself_addr;  Pervasives.flush Pervasives.stderr;
+  Owl_log.debug "parameter server @ %s\n" !_context.myself_addr;
   (* unmarshal the schedule and pull functions *)
   let schedule = !_schedule in
   let pull = !_pull in
@@ -90,34 +90,34 @@ let service_loop () =
     in
     let%lwt _ = Lwt.join task_threads in
     if List.length tasks > 0 then
-      Printf.fprintf Pervasives.stderr "schedule t:%i -> %i workers\n" !_context.step (List.length tasks); Pervasives.flush Pervasives.stderr;
+      Owl_log.debug "schedule t:%i -> %i workers\n" !_context.step (List.length tasks);
     (** wait for another message arrival *)
     let%lwt i, m = Actor_pure_utils.recv !_context.myself_sock in
     let t = m.bar in
     match m.typ with
     | PS_Get -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_get\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+      Owl_log.debug "%s: ps_get\n" !_context.myself_addr;
       let k = Marshal.from_string m.par.(0) 0 in
       let v, t' = _get k in
       let s = to_msg t' OK [| Marshal.to_string v [] |] in
       Actor_pure_zmq_repl.send_all ~block:false !_context.myself_sock [i;s]
       )
     | PS_Set -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_set\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+      Owl_log.debug "%s: ps_set\n" !_context.myself_addr;
       let k = Marshal.from_string m.par.(0) 0 in
       let v = Marshal.from_string m.par.(1) 0 in
       Lwt.return (_set k v t)
       )
     | PS_Push -> (
-      Printf.fprintf Pervasives.stderr "%s: ps_push\n" !_context.myself_addr; Pervasives.flush Pervasives.stderr;
+      Owl_log.debug "%s: ps_push\n" !_context.myself_addr;
       let updates_promises = Marshal.from_string m.par.(0) 0 |> pull in
       let updates_done = List.map (fun update_promise -> let%lwt k, v = update_promise in Lwt.return (_set k v t)) updates_promises in
       let%lwt _ = Lwt.join updates_done in
       Lwt.return (update_steps t i)
       )
-    | _ -> Lwt.return ( Printf.fprintf Pervasives.stderr "unknown mssage to PS\n"; Pervasives.flush Pervasives.stderr )
+    | _ -> Lwt.return ( Owl_log.warn "unknown mssage to PS\n" )
   done with Failure e -> (
-    Printf.fprintf Pervasives.stderr "%s\n" e; Pervasives.flush Pervasives.stderr;
+    Owl_log.warn "%s\n" e;
     terminate ();%lwt
     Lwt.return (Actor_pure_zmq_repl.close !_context.myself_sock) )
 

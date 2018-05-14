@@ -41,7 +41,7 @@ let start ?barrier jid url =
   let%lwt _ = match m.typ with
     | Job_Master -> MyServer.init m _context
     | Job_Worker -> MyClient.init m _context
-    | _ -> Lwt.return (Printf.fprintf Pervasives.stdout "%s\n" "unknown command"; Pervasives.flush Pervasives.stdout)
+    | _ -> Lwt.return (Owl_log.info "%s\n" "unknown command")
   in
   Lwt.return (Actor_pure_zmq_repl.close req)
 

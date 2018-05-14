@@ -16,7 +16,7 @@ let recv s =
 let send ?(bar=0) v t s =
   try%lwt Actor_pure_zmq_repl.send ~block:false v (to_msg bar t s)
   with _exn -> let hwm = Actor_pure_zmq_repl.get_send_high_water_mark v in
-  Printf.fprintf Pervasives.stderr "fail to send bar:%i hwm:%i\n" bar hwm; Pervasives.flush Pervasives.stderr;
+  Owl_log.error "fail to send bar:%i hwm:%i\n" bar hwm;
   Lwt.return ()
 
 let rec _bind_available_addr addr sock ztx =

@@ -14,7 +14,7 @@ let schedule workers =
 
 let push _ vars =
   let updates = List.map (fun (k,v) ->
-    Printf.fprintf Pervasives.stdout "working on %i\n" v; Pervasives.flush Pervasives.stdout;
+    Owl_log.info "working on %i\n" v;
     (k,v) ) vars in
   updates
 
@@ -22,6 +22,6 @@ let test_context () =
   PS.register_schedule schedule;
   PS.register_push push;
   PS.start Sys.argv.(1) Actor_pure_config.manager_addr;%lwt
-  Lwt.return (Printf.fprintf Pervasives.stdout "do some work at master node\n"; Pervasives.flush Pervasives.stdout)
+  Lwt.return (Owl_log.info "do some work at master node\n")
 
 let _ = Lwt_main.run (test_context ())
