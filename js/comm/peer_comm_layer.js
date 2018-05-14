@@ -140,7 +140,7 @@ function register_unixsocket_id(unixsocket_id) {
         'unixsocket_id': unixsocket_id
     });
 
-    return create_promise(promise_name, 10 * 1000);
+    return create_promise(promise_name, 120 * 1000);
 }
 
 function unregister_unixsocket_id(unixsocket_id) {
@@ -156,7 +156,7 @@ function unregister_unixsocket_id(unixsocket_id) {
         'unixsocket_id': unixsocket_id
     });
 
-    return create_promise(promise_name, 10 * 1000);
+    return create_promise(promise_name, 120 * 1000);
 }
 
 
@@ -190,8 +190,7 @@ function process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, paylo
 
     if ((typeof payload !== 'object')
         || (!('webrtc_type' in payload))
-        || payload.webrtc_type !== PCL_CONSTS.RTC_ICECANDIDATE
-        || payload.webrtc_type !== PCL_CONSTS.RTC_DESCRIPTION) {
+        || (payload.webrtc_type !== PCL_CONSTS.RTC_ICECANDIDATE && payload.webrtc_type !== PCL_CONSTS.RTC_DESCRIPTION)) {
         console.log('Unexpected kind of message:', payload);
         console.log('Dropping it!');
         return;
@@ -258,8 +257,10 @@ function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
 // Returns a promise resolved when the data channel is open.
 function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_caller) {
     var resolver = null;
-    var open_channel_promise = add_timeout_to_promise(new Promise(function (resolve, _) {resolver = resolve;},
-        60 * 1000,'Setting up the RTCPEERCONNECTION TIMEDOUT'));
+    var open_channel_promise = add_timeout_to_promise(
+        new Promise(function (resolve, _) {resolver = resolve;}),
+        60 * 1000,
+        'Setting up the RTCPeerConnecton timed-out');
 
     var pc = new RTCPeerConnection(WEBRTC_CONFIGURATION);
     PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id][other_unixsocket_id] = {
@@ -291,7 +292,7 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
         }).catch(log_error);
     };
 
-    function handle_new_datachannel(channel) {
+    function add_listeners_on_channel(channel) {
         channel.onopen = function (_) {
             resolver(channel); // resolve the promise when we get the channel open.
         };
@@ -299,7 +300,7 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
         channel.onclose = function (_) {
             console.log('Datachannel between', other_unixsocket_id, 'and', me_unixsocket_id, 'has closed down');
         };
-        
+
         channel.onmessage = function (event) {
             rtc_process_received_message(other_unixsocket_id, me_unixsocket_id, event.data);
         }
@@ -310,9 +311,11 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
     };
 
     if (am_caller) {
-        handle_new_datachannel(pc.createDataChannel(me_unixsocket_id + other_unixsocket_id));
+        add_listeners_on_channel(pc.createDataChannel(me_unixsocket_id + other_unixsocket_id));
     } else {
-        pc.ondatachannel = handle_new_datachannel;
+        pc.ondatachannel = function (event) {
+            add_listeners_on_channel(event.channel);
+        };
     }
 
     return open_channel_promise;
@@ -325,7 +328,7 @@ function connect_to_unixsocket(to_unixsocket_id) {
     // Or a failure.
 
     // Register the listening unixsocket.
-    register_unixsocket_id(from_unixsocket_id).then(function (_) {
+    return register_unixsocket_id(from_unixsocket_id).then(function (_) {
         // Set up the rtcpeerconnection.
         return set_up_rtcpeerconnection(from_unixsocket_id, to_unixsocket_id, true);
 
@@ -469,13 +472,14 @@ function reject_promise(name, reason) {
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {utils ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 function add_timeout_to_promise(promise, timeout, msg) {
-    return Promise.race([promise, function (_, reject) {
-        if (timeout < Infinity) {
-            setTimeout(function () {
-                reject("TIMEOUT!" + msg);
-            }, timeout);
-        }
-    }]);
+    return Promise.race([promise,
+        new Promise(function (_, reject) {
+            if (timeout < Infinity) {
+                setTimeout(function () {
+                    reject("TIMEOUT!" + msg);
+                }, timeout);
+            }
+        })]);
 }
 
 function promise_name_for_register_unixsocket_id(unixsocket_id) {
@@ -559,14 +563,19 @@ function test2() {
             var msg = msg.msg;
             console.log('SERVER: Got message', msg, 'from client with socket id', from_unixsocket_id);
 
-            rtc_send_msg(SERVER_SOCKET_ID, from_unixsocket_id, 'HI THERE CLIENT, thanks for msg - ' + msg);
+            return rtc_send_msg(SERVER_SOCKET_ID, from_unixsocket_id, 'HI THERE CLIENT, thanks for msg - ' + msg);
+        }).then(function (_) {
             console.log('SERVER IS DONE');
-        });
+        }).catch(log_error);
     } else {
         console.log('I AM CLIENT, waiting to connect to server');
         connect_to_unixsocket(SERVER_SOCKET_ID).then(function (my_socket_id) {
             console.log('I am client, connected to server with my socket', my_socket_id);
-            rtc_send_msg(my_socket_id, SERVER_SOCKET_ID, 'HI Server, I am client with id' + my_socket_id);
+            return rtc_send_msg(my_socket_id, SERVER_SOCKET_ID, 'HI Server, I am client with id' + my_socket_id)
+                .then(function (_) {
+                    return my_socket_id;
+                });
+        }).then(function (my_socket_id) {
             return rtc_get_msg_sync(my_socket_id);
         }).then(function (msg) {
             var from_unixsocket_id = msg.from_unixsocket_id;
@@ -574,7 +583,7 @@ function test2() {
             console.log('CLIENT: Got message', msg, 'from server with socket id', from_unixsocket_id);
             console.log('The from should be the same as socket:', from_unixsocket_id === SERVER_SOCKET_ID);
             console.log('CLIENT: I am done');
-        });
+        }).catch(log_error);
     }
 }
 
