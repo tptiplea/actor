@@ -15,7 +15,9 @@ const PCL_CONSTS = {
     ACK_OP : 'ACK_OPERATION',
     OK_STATUS : 'SUCCESS',
     FAIL_STATUS : 'FAIL',
-    CONNECTED_TO_SERVER_PROMISE_NAME : "connected_to_server_promise"
+    CONNECTED_TO_SERVER_PROMISE_NAME : "connected_to_server_promise",
+    RTC_ICECANDIDATE : "RTC_ICECANDIDATE",
+    RTC_DESCRIPTION : "RTC_DESCRIPTION"
 };
 
 //****************///
@@ -27,8 +29,9 @@ const PCL_CONSTS = {
 var PCL_VARS = {
     IOSOCKET : io(SERVER_URL),
     TOTAL_MESSAGES_SENT : 0,
-    UNIXSOCKET_IDS_DICT : {}, // keep track of unixsocket ids bound on this server
-    PROMISES_DICT : {} // keep track of promises
+    UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
+    PROMISES_DICT : {}, // keep track of promises
+    RTC_UNIXSOCKET_IN_Q : {} // keep messages. map[id].msg_q = queue of msgs, map[id].consumer_q = queue of promise resolvers
 };
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
@@ -121,10 +124,14 @@ function process_msg_from_server(msg) {
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ REGISTER/UNREGISTER UNIXSOCKETS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 function register_unixsocket_id(unixsocket_id) {
-    if (unixsocket_id in PCL_VARS.UNIXSOCKET_IDS_DICT) {
+    if (unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT) {
         throw "Unixsocket with id " + unixsocket_id + " already bound";
     }
-    PCL_VARS.UNIXSOCKET_IDS_DICT[unixsocket_id] = true;
+    PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id] = {}; // all the sockets we are connected to.
+    PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id] = {
+        'msg_q' : [],
+        'consumer_q' : []
+    };
 
     var promise_name = promise_name_for_register_unixsocket_id(unixsocket_id);
     send_msg_to_server({
@@ -137,10 +144,10 @@ function register_unixsocket_id(unixsocket_id) {
 }
 
 function unregister_unixsocket_id(unixsocket_id) {
-    if (!(unixsocket_id in PCL_VARS.UNIXSOCKET_IDS_DICT)) {
+    if (!(unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)) {
         throw "Unixsocket with id " + unixsocket_id + " not bound!";
     }
-    delete PCL_VARS.UNIXSOCKET_IDS_DICT[unixsocket_id];
+    delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
 
     var promise_name = promise_name_for_unregister_unixsocket_id(unixsocket_id);
     send_msg_to_server({
@@ -170,21 +177,59 @@ function send_ack_to_unixsocket(msg_id, from_unixsocket_id, to_unixsocket_id) {
     });
 }
 
-// TODO UPDATE
 function process_msg_from_unixsocket(from_unixsocket_id, to_unixsocket_id, payload, msg_id) {
-    var ack_to_unixsocket_id = from_unixsocket_id; // to other
-    var ack_from_unixsocket_id = to_unixsocket_id; // from me (reverse)
+    if (!(to_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)) {
+        console.log('ERROR!!!: Got a message for an unregistered unixsocket_id, dropping it.');
+        throw "Message for UNREGISTERED UNIXSOCKET ID";
+    }
+    // Pretty much always ack the message first.
+    var other_unixsocket_id = from_unixsocket_id; // to other
+    var me_unixsocket_id = to_unixsocket_id; // from me (reverse)
+    send_ack_to_unixsocket(msg_id, me_unixsocket_id, other_unixsocket_id);
+    // ---------
 
-    send_ack_to_unixsocket(msg_id, ack_from_unixsocket_id, ack_to_unixsocket_id);
-    console.log('\n\n------------');
-    console.log('Got message with id: ', msg_id);
-    console.log('From unixsocket_id: ', from_unixsocket_id);
-    console.log('To unixsocket_id (me):', to_unixsocket_id);
-    console.log('Payload: ', payload);
-    console.log('------------\n\n');
+    if ((typeof payload !== 'object')
+        || (!('webrtc_type' in payload))
+        || payload.webrtc_type !== PCL_CONSTS.RTC_ICECANDIDATE
+        || payload.webrtc_type !== PCL_CONSTS.RTC_DESCRIPTION) {
+        console.log('Unexpected kind of message:', payload);
+        console.log('Dropping it!');
+        return;
+    }
+
+    if (!(other_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id])) {
+        // First kind of message, start setting it up.
+        set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, false).catch(log_error);
+    }
+
+    var pc = PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id][other_unixsocket_id].pc;
+    if (payload.webrtc_type === PCL_CONSTS.RTC_ICECANDIDATE) {
+        // An ice candidate.
+        pc.addIceCandidate(new RTCIceCandidate(payload.icecandidate)).catch(log_error);
+    } else if (payload.webrtc_type === PCL_CONSTS.RTC_DESCRIPTION) {
+        var desc = payload.description;
+        if (desc.type === 'offer') {
+            // we got an offer, set it then set up the answer.
+            pc.setRemoteDescription(desc).then(function () {
+                return pc.createAnswer();
+            }).then(function (answer) {
+                // Set the answer as the local description
+                return pc.setLocalDescription(answer);
+            }).then(function() {
+                // send it over.
+                send_msg_to_unixsocket(me_unixsocket_id, other_unixsocket_id, {
+                    'webrtc_type' : PCL_CONSTS.RTC_DESCRIPTION,
+                    'description' : pc.localDescription
+                });
+            });
+
+        } else {
+            // we got an answer, set it as the remote description.
+            pc.setRemoteDescription(desc).catch(log_error);
+        }
+    }
 }
 
-// TODO: correct this
 function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
     var msg_id = update_msg_count_and_get_unique_id();
     send_msg_to_server({
@@ -204,6 +249,157 @@ function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
 /** ------------------------------------------------  PEER_TO_PEER_MSG ------------------------------- */
 
 
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONNECT_WEBRTC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+
+// Set up an RTCPeerConnection and a DataChannel between these two sockets.
+// Returns a promise resolved when the data channel is open.
+function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_caller) {
+    var resolver = null;
+    var open_channel_promise = add_timeout_to_promise(new Promise(function (resolve, _) {resolver = resolve;},
+        60 * 1000,'Setting up the RTCPEERCONNECTION TIMEDOUT'));
+
+    var pc = new RTCPeerConnection(WEBRTC_CONFIGURATION);
+    PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id][other_unixsocket_id] = {
+        'pc' : pc,
+        'channel_promise' : open_channel_promise
+    }; // VERY IMPORTANT! Store in the global dict
+
+    pc.onicecandidate = function (event) {
+        if (event.candidate) {
+            // A new ICE candidate, send it over to other peer.
+            send_msg_to_unixsocket(me_unixsocket_id, other_unixsocket_id, {
+                'webrtc_type' : PCL_CONSTS.RTC_ICECANDIDATE,
+                'icecandidate' : event.candidate
+            });
+        }
+    };
+
+    // This will be called on one of them, to make an offer.
+    pc.onnegotiationneeded = function (_) {
+        pc.createOffer().then(function (offer) {
+            return pc.setLocalDescription(offer); // first set the local description
+        }).then(function () {
+            // now set, send the description over to the other peer.
+            send_msg_to_unixsocket(me_unixsocket_id, other_unixsocket_id, {
+                'webrtc_type' : PCL_CONSTS.RTC_DESCRIPTION,
+                'description' : pc.localDescription
+            })
+
+        }).catch(log_error);
+    };
+
+    function handle_new_datachannel(channel) {
+        channel.onopen = function (_) {
+            resolver(channel); // resolve the promise when we get the channel open.
+        };
+
+        channel.onclose = function (_) {
+            console.log('Datachannel between', other_unixsocket_id, 'and', me_unixsocket_id, 'has closed down');
+        };
+        
+        channel.onmessage = function (event) {
+            rtc_process_received_message(other_unixsocket_id, me_unixsocket_id, event.data);
+        }
+    }
+
+    pc.onclose = function (_) {
+        console.log('RTCPeerConnection between', other_unixsocket_id, 'and', me_unixsocket_id, 'has closed down');
+    };
+
+    if (am_caller) {
+        handle_new_datachannel(pc.createDataChannel(me_unixsocket_id + other_unixsocket_id));
+    } else {
+        pc.ondatachannel = handle_new_datachannel;
+    }
+
+    return open_channel_promise;
+}
+
+// Connect to this socket.
+function connect_to_unixsocket(to_unixsocket_id) {
+    var from_unixsocket_id = get_unused_unixsocket_id();
+    // This will contain the result of the connection, either the from_unixsocket_id connected to this
+    // Or a failure.
+
+    // Register the listening unixsocket.
+    register_unixsocket_id(from_unixsocket_id).then(function (_) {
+        // Set up the rtcpeerconnection.
+        return set_up_rtcpeerconnection(from_unixsocket_id, to_unixsocket_id, true);
+
+    }).then(function () { // when that is successful as well, return the socket we're listening on.
+        return from_unixsocket_id;
+    });
+}
+
+/** ------------------------------------------------  CONNECT_WEBRTC ------------------------------- */
+/** ------------------------------------------------  CONNECT_WEBRTC ------------------------------- */
+/** ------------------------------------------------  CONNECT_WEBRTC ------------------------------- */
+
+
+
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ WEBRTC_SEND_RECV ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ WEBRTC_SEND_RECV ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ WEBRTC_SEND_RECV ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+/** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ WEBRTC_SEND_RECV ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+
+// Process a message received over the RTC channel
+function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg) {
+    var msg_with_src = {
+        'msg': msg,
+        'from_unixsocket_id': from_unixsocket_id
+    };
+    if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.length === 0) {
+        // no one waiting for a message, queue it.
+        PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].msg_q.push(msg_with_src);
+    } else {
+        // Otherwise, send it to the consumer.
+        var resolver = PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.pop();
+        resolver(msg_with_src);
+    }
+}
+
+// Send a message over the rtc channel.
+function rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg) {
+    if (!(to_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[from_unixsocket_id])) {
+        var error_msg = "ERROR: " + "The local socket -" + from_unixsocket_id +
+            "- is not connected to remote socket-" + to_unixsocket_id + "!";
+        console.log(error_msg);
+        return Promise.reject(error_msg);
+    }
+
+    var open_channel_promise = PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[from_unixsocket_id][to_unixsocket_id].channel_promise;
+
+    return open_channel_promise.then(function (channel) {
+        channel.send(msg);
+    });
+}
+
+function rtc_get_msg_sync(unixsocket_id) {
+    if (!(unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q)) {
+        var err_msg = "Unixsocket with id:" + unixsocket_id + "not registered with server.";
+        console.log(err_msg);
+        return Promise.reject(err_msg);
+    }
+
+    if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.length === 0) {
+        // No messages available, wait for them.
+        return add_timeout_to_promise(new Promise(function (resolve, _) {
+            PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.push(resolve);
+        }), 10 * 60 * 1000);
+    } else {
+        // A message available, return it now.
+        var msg = PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.pop();
+        return Promise.resolve(msg);
+    }
+}
+
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+/** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
+
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONDITION_VARIABLES_STUFF ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
 function create_promise(name, reject_timeout) {
@@ -217,7 +413,13 @@ function create_promise(name, reject_timeout) {
 
         // Set a timer to reject the promise on a timeout.
         if (reject_timeout < Infinity) {
-            setTimeout(reject, reject_timeout, 'TIMEOUT!');
+            setTimeout(function() {
+                try {
+                    reject_promise(name, 'TIMEOUT!' + name);
+                } catch(e) {
+                    // might have already been resolved, ignore then.
+                }
+            }, reject_timeout);
         }
     });
 
@@ -266,6 +468,16 @@ function reject_promise(name, reason) {
 /** ------------------------------------------------------- CONDITION_VARIABLES_STUFF ------------------------------- */
 
 /** ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ {utils ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
+function add_timeout_to_promise(promise, timeout, msg) {
+    return Promise.race([promise, function (_, reject) {
+        if (timeout < Infinity) {
+            setTimeout(function () {
+                reject("TIMEOUT!" + msg);
+            }, timeout);
+        }
+    }]);
+}
+
 function promise_name_for_register_unixsocket_id(unixsocket_id) {
     return "promise_register_unixsocket_id_" + unixsocket_id;
 }
@@ -291,6 +503,21 @@ function make_random_id(len) {
 function update_msg_count_and_get_unique_id() {
     PCL_VARS.TOTAL_MESSAGES_SENT += 1;
     return 'peer_unique_id_' + PCL_CONSTS.MY_UNIQUE_ID + '_msg_num_' + PCL_VARS.TOTAL_MESSAGES_SENT + '_id_' + make_random_id(8);
+}
+
+function get_unused_unixsocket_id() {
+    var _unixsocket_id = "none";
+    do {
+        _unixsocket_id = 'random_connect_unixsocket_id' + PCL_CONSTS.MY_UNIQUE_ID + make_random_id(10);
+    } while (_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT);
+    return _unixsocket_id;
+}
+
+function log_error(error) {
+    console.log("\n\n----------------");
+    console.log("Got an error:");
+    console.log(error);
+    console.log("----------------\n\n");
 }
 /** ----------------------------------------------------------- {utils ------------------------------- */
 
@@ -319,6 +546,38 @@ function test() {
     }, function (reason) { console.log('Failed to register unixsocket_id', MY_SOCKET_ID, 'with reason', reason); });
 }
 
-test();
+function test2() {
+    var am_server = true;
+    var SERVER_SOCKET_ID = "unixsocket_for_server";
+
+    if (am_server) {
+        console.log('I AM SERVER, binding address ', SERVER_SOCKET_ID);
+        register_unixsocket_id(SERVER_SOCKET_ID).then(function (_) {
+            return rtc_get_msg_sync(SERVER_SOCKET_ID);
+        }).then(function (msg) {
+            var from_unixsocket_id = msg.from_unixsocket_id;
+            var msg = msg.msg;
+            console.log('SERVER: Got message', msg, 'from client with socket id', from_unixsocket_id);
+
+            rtc_send_msg(SERVER_SOCKET_ID, from_unixsocket_id, 'HI THERE CLIENT, thanks for msg - ' + msg);
+            console.log('SERVER IS DONE');
+        });
+    } else {
+        console.log('I AM CLIENT, waiting to connect to server');
+        connect_to_unixsocket(SERVER_SOCKET_ID).then(function (my_socket_id) {
+            console.log('I am client, connected to server with my socket', my_socket_id);
+            rtc_send_msg(my_socket_id, SERVER_SOCKET_ID, 'HI Server, I am client with id' + my_socket_id);
+            return rtc_get_msg_sync(my_socket_id);
+        }).then(function (msg) {
+            var from_unixsocket_id = msg.from_unixsocket_id;
+            var msg = msg.msg;
+            console.log('CLIENT: Got message', msg, 'from server with socket id', from_unixsocket_id);
+            console.log('The from should be the same as socket:', from_unixsocket_id === SERVER_SOCKET_ID);
+            console.log('CLIENT: I am done');
+        });
+    }
+}
+
+test2();
 
 // ---------------------------------------------------------------------- TEST

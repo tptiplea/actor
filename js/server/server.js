@@ -40,6 +40,7 @@ console.log('Listening on port:', PCL_VARS.PORT);
 
 // When a new socket is created, register its possible handshakes.
 PCL_VARS.IO.on('connection', function (iosocket) {
+    console.log('New peer connected!');
     iosocket.on('peer_to_server', function (msg) {
        process_msg_from_peer(iosocket, msg);
     });
