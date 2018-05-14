@@ -57,7 +57,7 @@ let promise_send_msg local remote msg =
   Pcl_bindings.pcl_send_msg local remote msg ok_callback fail_callback;
   promise
 
-let promise_recv_msg local =
+let promise_recv_msg local timeout =
   let promise, resolver = Lwt.task () in
   let ok_callback = (fun rem msg -> Lwt.wakeup_later resolver (rem, msg)) in
   let fail_callback =
@@ -66,5 +66,5 @@ let promise_recv_msg local =
                 (Pcl_bindings.local_sckt_t_to_string local))
       resolver
   in
-  Pcl_bindings.pcl_recv_msg local ok_callback fail_callback;
+  Pcl_bindings.pcl_recv_msg local timeout ok_callback fail_callback;
   promise

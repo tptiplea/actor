@@ -25,6 +25,7 @@ let bound_address () =
   print_string "SERVER: Sucessfully bound address, listening on it!\n";
   PCLB.pcl_recv_msg
     my_addr
+    60000
     got_message_from_client
     (fail_callback "GETTING MESSAGE FROM CLIENT")
 

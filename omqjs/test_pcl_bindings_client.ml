@@ -18,6 +18,7 @@ let sent_message_to_test_server local_scket () =
   "CLIENT: Sent message to TEST server!\n" |> print_string;
   PCLB.pcl_recv_msg
     local_scket
+    60000
     got_reply_from_server
     (fail_callback "GETTING REPLY FROM SERVER")
 

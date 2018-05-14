@@ -435,7 +435,7 @@ function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg)
         PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].msg_q.push(msg_with_src);
     } else {
         // Otherwise, send it to the consumer.
-        var resolver = PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.pop();
+        var resolver = (PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.pop()).resolver;
         resolver(msg_with_src);
     }
 }
@@ -462,7 +462,7 @@ function rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg) {
 // Returns a promise that resolves to an {from_unixsocket_id: _, msg: _} object.
 // Provides: rtc_get_msg_sync
 // Requires: PCL_VARS, PCL_CONSTS, add_timeout_to_promise
-function rtc_get_msg_sync(unixsocket_id) {
+function rtc_get_msg_sync(unixsocket_id, timeout) {
     if (!(unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q)) {
         var err_msg = "Unixsocket with id:" + unixsocket_id + "not registered with server.";
         console.log(err_msg);
@@ -471,9 +471,31 @@ function rtc_get_msg_sync(unixsocket_id) {
 
     if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.length === 0) {
         // No messages available, wait for them.
-        return add_timeout_to_promise(new Promise(function (resolve, _) {
-            PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.push(resolve);
-        }), 10 * 60 * 1000);
+        return new Promise(function (resolve, reject) {
+            var promise_id = make_random_id(20);
+            PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.push({
+                'resolver' : resolve,
+                'id' : promise_id
+            });
+            setTimeout(function () {
+                // If not resolved, find this promise, remove it from the queue, then reject the promise.
+                if (unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q) {
+                    var len = PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.length;
+                    var index = -1;
+                    for (var i = 0; i < len; i++) {
+                        if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q[i].id === promise_id) {
+                            index = i;
+                            break;
+                        }
+                    }
+                    if (index > -1) {
+                        PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.splice(index, 1); // remove it
+                        // and reject the promise
+                        reject("TIMEOUT: " + timeout " ms have passed.");
+                    }
+                }
+            }, timeout);
+        });
     } else {
         // A message available, return it now.
         var msg = PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.pop();
@@ -556,7 +578,7 @@ function pcl_jsapi_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_succes
 // If an error occurs, the other callback is called with on_failure_callback(reason).
 // Provides: pcl_jsapi_recv_msg
 // Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
-function pcl_jsapi_recv_msg(unixsocket_id, on_success_callback, on_failure_callback) {
+function pcl_jsapi_recv_msg(unixsocket_id, timeout, on_success_callback, on_failure_callback) {
     rtc_get_msg_sync(unixsocket_id).then(function (res) {
         on_success_callback(res.from_unixsocket_id, res.msg);
     }).catch(function (reason) {

@@ -57,6 +57,7 @@ val pcl_send_msg : local_sckt_t -> remote_sckt_t -> msg_t -> (unit -> unit) -> f
 (**
    Function that takes a unixsocket_id to listen on calls the success callback with
    on_success_callback(from_unixsocket_id, msg) when the message is available.
-   pcl_recv_msg local_socket on_success_callback on_failure_callback
+   pcl_recv_msg local_socket timeout on_success_callback on_failure_callback
+   Will fail if no message after timeout ms pass.
 *)
-val pcl_recv_msg : local_sckt_t -> (remote_sckt_t -> msg_t -> unit) -> fail_callback_t -> unit
+val pcl_recv_msg : local_sckt_t -> int -> (remote_sckt_t -> msg_t -> unit) -> fail_callback_t -> unit

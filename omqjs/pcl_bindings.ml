@@ -83,10 +83,11 @@ let pcl_send_msg (from_socket : local_sckt_t) (to_socket : remote_sckt_t)
   Js.Unsafe.fun_call
     _pcl_jsapi_send_msg_jsfun [|from_socket; to_socket; msg; ok_callback; fail_callback|]
 
-let pcl_recv_msg (listen_on_socket : local_sckt_t)
+let pcl_recv_msg (listen_on_socket : local_sckt_t) (timeout : int)
     (ok_callback : remote_sckt_t -> msg_t -> unit) (fail_callback : fail_callback_t) =
   let listen_on_socket = _unsafe_wrap_string listen_on_socket in
+  let timeout = Js.Unsafe.inject timeout in
   let ok_callback = _unsafe_wrap_2_string_args_fun ok_callback in
   let fail_callback = _unsafe_wrap_string_arg_fun fail_callback in
   Js.Unsafe.fun_call
-    _pcl_jsapi_recv_msg_jsfun [|listen_on_socket; ok_callback; fail_callback|]
+    _pcl_jsapi_recv_msg_jsfun [|listen_on_socket; timeout; ok_callback; fail_callback|]
