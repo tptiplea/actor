@@ -17,6 +17,8 @@ type operation_t =
 type omq_socket_t = {
   (* the kind of socket *)
   kind : omq_sckt_kind;
+  (* whether it is open *)
+  mutable is_open : bool;
   (* the identity of the socket, created randomly, or can be set *)
   mutable identity : omq_socket_id_t;
   (* which unix_sockets we are listening on with this omq_socket *)
@@ -43,8 +45,7 @@ type omq_socket_t = {
   mutable in_cons_q : ((omq_socket_id_t * omq_msg_t) Lwt.t * (omq_socket_id_t * omq_msg_t) Lwt.u) Queue.t;
 }
 
-(* Sweeps through the queues and removes resolved/rejected promises. *)
-(*  *)
+let _ensure_is_open sckt = if not sckt.is_open then raise (OMQ_Exception "ERROR: Operation on closed socket")
 
 let _rmv_nonpending_promises_in_prefix sckt =
   Omq_utils.trim_queue_prefix (fun (p, _) -> not (Lwt.is_sleeping p)) sckt.in_cons_q;
@@ -87,7 +88,7 @@ let _on_msg_to_sckt sckt remote local msg =
     ) else (
       let _, resolver = Queue.pop sckt.in_cons_q in
       match Omq_utils.safe_resolve_promise resolver (from_omq_id, msg) with
-        true -> () (* all went ok *)
+        true -> (sckt.routing_table <- OmqSocketIdMap.add from_omq_id (local, remote) sckt.routing_table) (* all went ok *)
       | _ -> print_string "ERROR: Could not resolve in_cons_q promise although it should still be pending!!\n"
     )
   )
@@ -126,16 +127,19 @@ let _stop_listening_on_local sckt local =
   )
 
 let bind_local sckt local =
+  _ensure_is_open sckt;
   let%lwt () = Pcl_lwt.promise_bind_address
       local (_on_msg_to_sckt sckt) (_on_connection_to sckt)
   in
   Lwt.return (_listen_on_local sckt local)
 
 let deallocate_local sckt local =
+  _ensure_is_open sckt;
   _stop_listening_on_local sckt local;
   Pcl_lwt.promise_deallocate_address local
 
 let connect_to_remote sckt remote =
+  _ensure_is_open sckt;
   let%lwt local = Pcl_lwt.promise_connect_to_address
       remote (_on_msg_to_sckt sckt) (_on_connection_to sckt) in
   Printf.printf "INFO: %s omqsocket is connected to remote %s, listening on local %s\n"
@@ -179,7 +183,8 @@ let _recv_msg_with_id_any_sckt sckt =
   if (Queue.is_empty sckt.in_msg_q)
   then (
     let remote, local, id, msg = Queue.pop sckt.in_msg_q in
-      sckt.last_operation <- Some (Recv (remote, local));
+    sckt.last_operation <- Some (Recv (remote, local));
+    sckt.routing_table <- OmqSocketIdMap.add id (local, remote) sckt.routing_table;
       Lwt.return (id, msg)
   )
   else (
@@ -194,16 +199,19 @@ let _recv_msg_with_id_any_sckt sckt =
   )
 
 let recv_msg_with_id sckt =
+  _ensure_is_open sckt;
   match sckt.kind with
     ROUTER -> _recv_msg_with_id_any_sckt sckt
   | k -> OMQ_Exception ("Cannot get identity from socket of kind " ^ Omq_types.omq_sckt_kind_to_string k) |> Lwt.fail
 
 let recv_msg sckt =
+  _ensure_is_open sckt;
   let%lwt _, msg = _recv_msg_with_id_any_sckt sckt in
   Lwt.return msg
 
 (* Send a message, either blocking or non-blocking *)
 let send_msg ?(block=true) sckt ?dest_omq_id msg =
+  _ensure_is_open sckt;
   (* the message will contain the id (mine) as the first frame *)
   let msg = _pack_to_raw_msg sckt.identity msg in
   match sckt.kind with
@@ -236,3 +244,33 @@ let send_msg ?(block=true) sckt ?dest_omq_id msg =
         (* does not exist anymore, discard the message silently, as in the OMQ doc *)
         | None -> Lwt.return ()
     )
+
+let set_send_high_water_mark sckt hwm = _ensure_is_open sckt; sckt.send_high_water_mark <- hwm
+let get_send_high_water_mark sckt = _ensure_is_open sckt; sckt.send_high_water_mark
+let set_recv_high_water_mark sckt hwm = _ensure_is_open sckt; sckt.recv_high_water_mark <- hwm
+let get_recv_high_water_mark sckt = _ensure_is_open sckt; sckt.recv_high_water_mark
+let set_send_timeoutms sckt tm = _ensure_is_open sckt; sckt.send_timeout_ms <- tm
+let set_recv_timeoutms sckt tm = _ensure_is_open sckt; sckt.recv_timeout_ms <- tm
+let set_identity sckt id = _ensure_is_open sckt; sckt.identity <- id
+let get_identity sckt = _ensure_is_open sckt; sckt.identity
+
+let _internal_create k = {
+  kind = k;
+  is_open = true;
+  identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
+  listening_on = LocalSocketSet.empty;
+  connections_to = RemoteSocketMap.empty;
+  routing_table = OmqSocketIdMap.empty;
+  send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
+  recv_timeout_ms = Pervasives.max_int;
+  send_high_water_mark = 10_000;
+  recv_high_water_mark = 10_000;
+  last_operation = None;
+  out_msg_q = Queue.create ();
+  in_msg_q = Queue.create ();
+  in_cons_q = Queue.create ();
+}
+
+let _internal_close sckt =
+  _ensure_is_open sckt;
+  sckt.is_open <- false

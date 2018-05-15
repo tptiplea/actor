@@ -26,4 +26,18 @@ val deallocate_local : omq_socket_t -> Pcl_bindings.local_sckt_t -> unit Lwt.t
 (* Connect to a remote address *)
 val connect_to_remote : omq_socket_t -> Pcl_bindings.remote_sckt_t -> Pcl_bindings.local_sckt_t Lwt.t
 
-(* *)
+(* Create *)
+val _internal_create : Omq_types.omq_sckt_kind -> omq_socket_t
+
+(* Close *)
+val _internal_close : omq_socket_t -> unit
+
+(* Setter/getters *)
+val set_send_high_water_mark : omq_socket_t -> int -> unit
+val set_recv_high_water_mark : omq_socket_t -> int -> unit
+val get_send_high_water_mark : omq_socket_t -> int
+val get_recv_high_water_mark : omq_socket_t -> int
+val set_send_timeoutms : omq_socket_t -> int -> unit
+val set_recv_timeoutms : omq_socket_t -> int -> unit
+val set_identity : omq_socket_t -> omq_socket_id_t -> unit
+val get_identity : omq_socket_t -> omq_socket_id_t
