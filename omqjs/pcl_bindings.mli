@@ -16,6 +16,8 @@ val string_to_fail_reason_t : string -> fail_reason_t
 
 module LocalSocketSet : Set.S with type elt = local_sckt_t
 module RemoteSocketSet : Set.S with type elt = remote_sckt_t
+module LocalSocketMap : Map.S with type key = local_sckt_t
+module RemoteSocketMap : Map.S with type key = remote_sckt_t
 
 (** A failure callback is given a stringified reason for the failure *)
 type fail_callback_t = fail_reason_t -> unit

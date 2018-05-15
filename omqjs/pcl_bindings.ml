@@ -16,6 +16,8 @@ let string_to_fail_reason_t = _id
 
 module LocalSocketSet = Set.Make(String)
 module RemoteSocketSet = Set.Make(String)
+module LocalSocketMap = Map.Make(String)
+module RemoteSocketMap = Map.Make(String)
 
 (** A failure callback is given a stringified reason for the failure *)
 type fail_callback_t = fail_reason_t -> unit
