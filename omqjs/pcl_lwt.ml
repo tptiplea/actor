@@ -1,7 +1,7 @@
 let promise_start_comm_layer server_url =
   let promise, resolver = Lwt.task () in
   let ok_callback = (
-    fun unique_id -> Lwt.wakeup_later resolver unique_id
+    fun unique_id -> ignore (Omq_utils.safe_resolve_promise resolver unique_id)
   ) in
   let fail_callback =
     Omq_utils.make_exn_fail_callback
@@ -12,7 +12,7 @@ let promise_start_comm_layer server_url =
 
 let promise_bind_address socket on_msg_callback on_connection_to_callback =
   let promise, resolver = Lwt.task () in
-  let ok_callback = (fun () -> Lwt.wakeup_later resolver ()) in
+  let ok_callback = (fun () -> ignore (Omq_utils.safe_resolve_promise resolver ())) in
   let fail_callback =
     Omq_utils.make_exn_fail_callback
       ~context:("fail: cannot bind " ^ (Pcl_bindings.local_sckt_t_to_string socket))
@@ -23,7 +23,7 @@ let promise_bind_address socket on_msg_callback on_connection_to_callback =
 
 let promise_deallocate_address socket =
   let promise, resolver = Lwt.task () in
-  let ok_callback = (fun () -> Lwt.wakeup_later resolver ()) in
+  let ok_callback = (fun () -> ignore (Omq_utils.safe_resolve_promise resolver ())) in
   let fail_callback =
     Omq_utils.make_exn_fail_callback
       ~context:("fail: cannot deallocate " ^ (Pcl_bindings.local_sckt_t_to_string socket))
@@ -35,7 +35,7 @@ let promise_deallocate_address socket =
 
 let promise_connect_to_address remote_socket on_msg_callback on_connection_to_callback =
   let promise, resolver = Lwt.task () in
-  let ok_callback = (fun local_socket -> Lwt.wakeup_later resolver local_socket) in
+  let ok_callback = (fun local_socket -> ignore (Omq_utils.safe_resolve_promise resolver local_socket)) in
   let fail_callback =
     Omq_utils.make_exn_fail_callback
       ~context:("fail: cannot connect to remote_socket " ^
@@ -47,7 +47,7 @@ let promise_connect_to_address remote_socket on_msg_callback on_connection_to_ca
 
 let promise_send_msg local remote msg =
   let promise, resolver = Lwt.task () in
-  let ok_callback = (fun () -> Lwt.wakeup_later resolver ()) in
+  let ok_callback = (fun () -> ignore (Omq_utils.safe_resolve_promise resolver ())) in
   let fail_callback =
     Omq_utils.make_exn_fail_callback
       ~context:("fail: cannot send msg to " ^

@@ -18,52 +18,54 @@ type omq_socket_t = {
   mutable identity : omq_socket_id_t;
   (* which unix_sockets we are listening on with this omq_socket *)
   mutable listening_on : LocalSocketSet.t;
+  (* map from remote -> local socket *)
+  mutable connections_to : local_sckt_t RemoteSocketMap.t;
   (* map from remote idenitities to lower connections *)
   mutable routing_table : (local_sckt_t * remote_sckt_t) OmqSocketIdMap.t;
   (* timeout for send operation *)
-  mutable send_timeout : int;
+  mutable send_timeout_ms : int;
   (* timeout for a recv operation *)
-  mutable recv_timeout : int;
+  mutable recv_timeout_ms : int;
+  (* the queue size for outgoing operations *)
+  mutable send_high_water_mark : int;
   (* the queue size of recv operations *)
   mutable recv_high_water_mark : int;
   (* the last successful operation *)
   mutable last_operation : operation_t option;
-(* the queue of outgoing msgs that we're not sent because no service available *)
-  mutable out_queue : (msg_t * (unit Lwt.u)) list
+  (* the queue of outgoing msgs that were not sent because no service available, and their resolvers *)
+  mutable out_msg_q : (msg_t * ((unit Lwt.t) * (unit Lwt.u))) list;
+  (* the queue of incoming msgs for this socket*)
+  mutable in_msg_q : (remote_sckt_t * local_sckt_t * omq_socket_id_t * msg_t) list;
+  (* the queue of promises for messages *)
+  mutable in_cons_q : ((omq_socket_id_t * msg_t) Lwt.t * (omq_socket_id_t * msg_t) Lwt.u) list;
 }
 
-(* Get all remotes connected to this local socket *)
-let _get_connected_to local =
-  let remotes = ref RemoteSocketSet.empty in
-  let collect = (fun remote -> remotes := RemoteSocketSet.add remote !remotes) in
-  let _ = pcl_get_all_remote_sockets local collect in
-  !remotes
-
-let _get_all_connections sckt =
-  let connections = ref RemoteSocketMap.empty in
-  let _ = LocalSocketSet.iter (fun local ->
-      RemoteSocketSet.iter (fun remote ->
-          ignore (RemoteSocketMap.add remote local !connections)
-        ) (_get_connected_to local)
-    ) sckt.listening_on in
-  !connections
+(* Sweeps through the queues and removes resolved/rejected promises *)
+let _rmv_nonpending_promises sckt =
+  sckt.out_msg_q <- List.filter (fun (_, (p, _)) -> Lwt.is_sleeping p) sckt.out_msg_q;
+  sckt.in_cons_q <- List.filter (fun (p, _) -> Lwt.is_sleeping p) sckt.in_cons_q
 
 (* TODO: This is choosing one at random for now *)
+(* If no services connected, it either queues the message or  *)
 let _round_robin_send_msg ?(block=true) sckt msg =
-  let cncts = _get_all_connections sckt in
+  let cncts = sckt.connections_to in
   match RemoteSocketMap.is_empty cncts with
   | true -> (
       if block then (
-        let promise, resolver = Lwt.task () in
-        let _ = sckt.out_queue <- (msg, resolver)::sckt.out_queue in
-        let _ = Lwt_timeout.create sckt.send_timeout (fun () ->
-            Lwt.wakeup_later_exn resolver (OMQ_Exception "TIMEDOUT trying to send message!")
-          ) |> Lwt_timeout.start in
-        promise
+        let _ = _rmv_nonpending_promises sckt in
+        let out_q_l = List.length sckt.out_msg_q in
+        if out_q_l >= sckt.send_high_water_mark
+        then OMQ_Exception "Cannot queue for send - reached send_high_water_mark!" |> Lwt.fail
+        else
+          let promise, resolver = Lwt.task () in
+          let _ = sckt.out_msg_q <- (msg, (promise, resolver))::sckt.out_msg_q in
+          let _ = Omq_utils.add_mstimeout_to_promise sckt.send_timeout_ms resolver
+              (OMQ_Exception "TIMEDOUT trying to send message!")
+          in promise
       ) else
         Lwt.fail (OMQ_Exception "No connected services to send msg to!!")
     )
-  | false ->
+  | false -> (* choose a random service to send it to *)
     let rand_ind = ref (RemoteSocketMap.cardinal cncts |> Random.int) in
     let remote = ref (RemoteSocketMap.choose cncts |> fst) in
     let local = ref (RemoteSocketMap.find !remote cncts) in
@@ -74,36 +76,61 @@ let _round_robin_send_msg ?(block=true) sckt msg =
     sckt.last_operation <- Some (Send (!local, !remote));
     promise_send_msg !local !remote msg
 
+(* Recv message, always blocking, but with timeout *)
+let _recv_msg_with_id_any_sckt sckt =
+  match sckt.in_msg_q with
+    (_, _, id, msg)::rest_in_q -> sckt.in_msg_q <- rest_in_q; Lwt.return (id, msg)
+  | [] ->
+    let _ = _rmv_nonpending_promises sckt in
+    let in_cons_q_l = List.length sckt.in_cons_q in
+    if in_cons_q_l >= sckt.recv_high_water_mark
+    then OMQ_Exception "Cannot wait for message -- reached recv_high_water_mark" |> Lwt.fail
+    else
+      let promise, resolver = Lwt.task () in
+      sckt.in_cons_q <- (promise, resolver)::sckt.in_cons_q;
+      Omq_utils.add_mstimeout_to_promise sckt.send_timeout_ms resolver (OMQ_Exception "TIMEOUT waiting for message!");
+      promise
 
+let recv_msg_with_id sckt =
+  match sckt.kind with
+    ROUTER -> _recv_msg_with_id_any_sckt sckt
+  | k -> OMQ_Exception ("Cannot get identity from socket of kind " ^ Omq_types.omq_sckt_kind_to_string k) |> Lwt.fail
 
-let send_msg ?(block=true) sckt other_omq_id msg =
+let recv_msg sckt =
+  let%lwt _, msg = _recv_msg_with_id_any_sckt sckt in
+  Lwt.return msg
+
+(* Send a message, either blocking or non-blocking *)
+let send_msg ?(block=true) sckt ?dest_omq_id msg =
   (* the message will contain the id (mine) as the first frame *)
   let msg = Json.output (sckt.identity, msg) |> Js.to_string |> string_to_msg_t in
   match sckt.kind with
     REQ -> (
       match sckt.last_operation with
         Some (Send (_, _)) -> OMQ_Exception "Called send twice in a row on a REQ socket" |> Lwt.fail
-      | _ -> _round_robin_send_msg ~block sckt msg
+      | _ -> _round_robin_send_msg ~block sckt msg (* send in round robin style to one of the connected services *)
     )
   | REP -> (
       match sckt.last_operation with
         Some (Recv (remote, local)) -> (
-          match _get_connected_to local |> RemoteSocketSet.mem remote with
-            true -> promise_send_msg local remote msg
-          | false -> Lwt.return () (*silently discard, as in docs *)
+          match sckt.connections_to |> RemoteSocketMap.mem remote with
+            true -> sckt.last_operation <- Some (Send (local, remote)); promise_send_msg local remote msg
+          | false -> Lwt.return () (*silently discard if peer is not here, as in docs *)
         )
       | Some (Send (_, _)) -> OMQ_Exception "Called send twice in a row on a REP socket" |> Lwt.fail
       | None -> OMQ_Exception "Called send before any recv on a REP socket" |> Lwt.fail
     )
-  | DEALER -> (
-      Lwt.return ()
-    )
+  | DEALER -> _round_robin_send_msg ~block sckt msg (* send in round robin style *)
   | ROUTER -> (
-      let connection = OmqSocketIdMap.find_opt other_omq_id sckt.routing_table in
-      match connection with
-      | Some (local, remote) ->
-        sckt.last_operation <- Some (Send (local, remote));
-        Pcl_lwt.promise_send_msg local remote msg
-      (* does not exist anymore, discard the message silently, as in the OMQ doc *)
-      | None -> Lwt.return ()
+      match dest_omq_id with
+        None -> OMQ_Exception "Must provide OMQ Socket Identity when sending on Router socket" |> Lwt.fail
+      | Some dest_omq_id ->
+        let connection = OmqSocketIdMap.find_opt dest_omq_id sckt.routing_table in
+        match connection with
+          Some (local, remote) -> (
+            sckt.last_operation <- Some (Send (local, remote));
+            Pcl_lwt.promise_send_msg local remote msg
+          )
+        (* does not exist anymore, discard the message silently, as in the OMQ doc *)
+        | None -> Lwt.return ()
     )
