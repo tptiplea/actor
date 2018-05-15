@@ -533,6 +533,10 @@ function pcl_jsapi_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_succes
     });
 }
 
+function pcl_jsapi_util_rand_str(length) {
+    return make_random_id(length);
+}
+
 /** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
 /** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
 /** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */

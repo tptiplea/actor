@@ -64,3 +64,8 @@ val pcl_connect_to_address : remote_sckt_t -> on_msg_callback_t -> on_connection
    pcl_send_msg unixsocket_A unixsocket_B msg on_success_callback on_failure_callback
 *)
 val pcl_send_msg : local_sckt_t -> remote_sckt_t -> msg_t -> (unit -> unit) -> fail_callback_t -> unit
+
+(**
+   Generate a random string of the given length.
+*)
+val pcl_util_rand_str : int -> string

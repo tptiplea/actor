@@ -30,6 +30,7 @@ let _pcl_jsapi_bind_address_jsfun = Js.Unsafe.js_expr "pcl_jsapi_bind_address"
 let _pcl_jsapi_deallocate_address_jsfun = Js.Unsafe.js_expr "pcl_jsapi_deallocate_address"
 let _pcl_jsapi_connect_to_address_jsfun = Js.Unsafe.js_expr "pcl_jsapi_connect_to_address"
 let _pcl_jsapi_send_msg_jsfun = Js.Unsafe.js_expr "pcl_jsapi_send_msg"
+let _pcl_jsapi_util_rand_str = Js.Unsafe.js_expr "pcl_jsapi_util_rand_str"
 
 let _unsafe_wrap_unit_arg_fun (f : unit -> 'a) =
   Js.wrap_callback f |> Js.Unsafe.inject
@@ -104,3 +105,7 @@ let pcl_send_msg (from_socket : local_sckt_t) (to_socket : remote_sckt_t)
   let fail_callback = _unsafe_wrap_string_arg_fun fail_callback in
   Js.Unsafe.fun_call
     _pcl_jsapi_send_msg_jsfun [|from_socket; to_socket; msg; ok_callback; fail_callback|]
+
+let pcl_util_rand_str len =
+  let res = Js.Unsafe.fun_call _pcl_jsapi_util_rand_str [|Js.Unsafe.inject len|] in
+  Js.to_string res
