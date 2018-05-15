@@ -33,7 +33,7 @@ var PCL_VARS = {
     TOTAL_MESSAGES_SENT : 0,
     UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
     PROMISES_DICT : {}, // keep track of promises
-    RTC_UNIXSOCKET_IN_Q : {} // keep messages. map[id].msg_q = queue of msgs, map[id].consumer_q = queue of promise resolvers
+    RTC_UNIXSOCKET_ONMSGCALLBACK : {} // a callback called with two arguments, (from, msg) on each message rcvd for that unixsocket
 };
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
@@ -150,15 +150,12 @@ function process_msg_from_server(msg) {
 // Returns a promise resolved when the address is bound correctly.
 // Provides: register_unixsocket_id
 // Requires: PCL_VARS, PCL_CONSTS, promise_name_for_register_unixsocket_id, send_msg_to_server, log_error, create_promise
-function register_unixsocket_id(unixsocket_id) {
+function register_unixsocket_id(unixsocket_id, on_msg_callback) {
     if (unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT) {
         return Promise.reject("Unixsocket with id " + unixsocket_id + " already bound");
     }
     PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id] = {}; // all the sockets we are connected to.
-    PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id] = {
-        'msg_q' : [],
-        'consumer_q' : []
-    };
+    PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id] = on_msg_callback;
 
     var promise_name = promise_name_for_register_unixsocket_id(unixsocket_id);
     var promise = create_promise(promise_name, 120 * 1000);
@@ -170,7 +167,7 @@ function register_unixsocket_id(unixsocket_id) {
         return promise;
     }).catch(function (reason) {
         delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
-        delete PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id];
+        delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id];
         log_error(reason);
         throw reason; // Pass the error forward
     });
@@ -183,6 +180,7 @@ function unregister_unixsocket_id(unixsocket_id) {
         return Promise.reject("Unixsocket with id " + unixsocket_id + " not bound!");
     }
     delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
+    delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id];
 
     var promise_name = promise_name_for_unregister_unixsocket_id(unixsocket_id);
     var promise = create_promise(promise_name, 120 * 1000);
@@ -396,13 +394,13 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
 // This will be a new socket.
 // Provides: connect_to_unixsocket
 // Requires: PCL_VARS, PCL_CONSTS, get_unused_unixsocket_id, register_unixsocket_id, set_up_rtcpeerconnection
-function connect_to_unixsocket(to_unixsocket_id) {
+function connect_to_unixsocket(to_unixsocket_id, on_msg_callback) {
     var from_unixsocket_id = get_unused_unixsocket_id();
     // This will contain the result of the connection, either the from_unixsocket_id connected to this
     // Or a failure.
 
     // Register the listening unixsocket.
-    return register_unixsocket_id(from_unixsocket_id).then(function (_) {
+    return register_unixsocket_id(from_unixsocket_id, on_msg_callback).then(function (_) {
         // Set up the rtcpeerconnection.
         return set_up_rtcpeerconnection(from_unixsocket_id, to_unixsocket_id, true);
 
@@ -426,17 +424,11 @@ function connect_to_unixsocket(to_unixsocket_id) {
 // Provides: rtc_process_received_message
 // Requires: PCL_VARS, PCL_CONSTS
 function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg) {
-    var msg_with_src = {
-        'msg': msg,
-        'from_unixsocket_id': from_unixsocket_id
-    };
-    if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.length === 0) {
-        // no one waiting for a message, queue it.
-        PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].msg_q.push(msg_with_src);
+    if (to_unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK) {
+        // Call the callback.
+        (PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[to_unixsocket_id])(from_unixsocket_id, to_unixsocket_id, msg);
     } else {
-        // Otherwise, send it to the consumer.
-        var resolver = (PCL_VARS.RTC_UNIXSOCKET_IN_Q[to_unixsocket_id].consumer_q.pop()).resolver;
-        resolver(msg_with_src);
+        // Drop it.
     }
 }
 
@@ -459,49 +451,6 @@ function rtc_send_msg(from_unixsocket_id, to_unixsocket_id, msg) {
     });
 }
 
-// Returns a promise that resolves to an {from_unixsocket_id: _, msg: _} object.
-// Provides: rtc_get_msg_sync
-// Requires: PCL_VARS, PCL_CONSTS, add_timeout_to_promise
-function rtc_get_msg_sync(unixsocket_id, timeout) {
-    if (!(unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q)) {
-        var err_msg = "Unixsocket with id:" + unixsocket_id + "not registered with server.";
-        console.log(err_msg);
-        return Promise.reject(err_msg);
-    }
-
-    if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.length === 0) {
-        // No messages available, wait for them.
-        return new Promise(function (resolve, reject) {
-            var promise_id = make_random_id(20);
-            PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.push({
-                'resolver' : resolve,
-                'id' : promise_id
-            });
-            setTimeout(function () {
-                // If not resolved, find this promise, remove it from the queue, then reject the promise.
-                if (unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_IN_Q) {
-                    var len = PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.length;
-                    var index = -1;
-                    for (var i = 0; i < len; i++) {
-                        if (PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q[i].id === promise_id) {
-                            index = i;
-                            break;
-                        }
-                    }
-                    if (index > -1) {
-                        PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].consumer_q.splice(index, 1); // remove it
-                        // and reject the promise
-                        reject("TIMEOUT: " + timeout " ms have passed.");
-                    }
-                }
-            }, timeout);
-        });
-    } else {
-        // A message available, return it now.
-        var msg = PCL_VARS.RTC_UNIXSOCKET_IN_Q[unixsocket_id].msg_q.pop();
-        return Promise.resolve(msg);
-    }
-}
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
 /** ------------------------------------------------  WEBRTC_SEND_RECV ------------------------------- */
@@ -528,8 +477,8 @@ function pcl_jsapi_start_comm_layer(signalling_server_url, on_success_callback, 
 // calling the on_success_callback on success, or the failure_callback with the reason on fail.
 // Provides: pcl_jsapi_bind_address
 // Requires: register_unixsocket_id
-function pcl_jsapi_bind_address(unixsocket_id, on_success_callback, on_failure_callback) {
-    register_unixsocket_id(unixsocket_id).then(function (_) {
+function pcl_jsapi_bind_address(unixsocket_id, on_msg_callback, on_success_callback, on_failure_callback) {
+    register_unixsocket_id(unixsocket_id, on_msg_callback).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
         on_failure_callback(reason);
@@ -553,8 +502,8 @@ function pcl_jsapi_deallocate_address(unixsocket_id, on_success_callback, on_fai
 // or the failure_callback if some error occurred.
 // Provide: pcl_jsapi_connect_to_address
 // Requires: connect_to_unixsocket
-function pcl_jsapi_connect_to_address(to_unixsocket_id, on_success_callback, on_failure_callback) {
-    connect_to_unixsocket(to_unixsocket_id).then(function (from_unixsocket_id) {
+function pcl_jsapi_connect_to_address(to_unixsocket_id, on_msg_callback, on_success_callback, on_failure_callback) {
+    connect_to_unixsocket(to_unixsocket_id, on_msg_callback).then(function (from_unixsocket_id) {
         on_success_callback(from_unixsocket_id);
     }).catch(function (reason) {
         on_failure_callback(reason);
@@ -574,16 +523,13 @@ function pcl_jsapi_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_succes
     });
 }
 
-// Function that calls the first callback with on_success_callback(from_unixsocket_id, msg) when the message is available.
-// If an error occurs, the other callback is called with on_failure_callback(reason).
-// Provides: pcl_jsapi_recv_msg
-// Requires: PCL_VARS, PCL_CONSTS, rtc_get_msg_sync
-function pcl_jsapi_recv_msg(unixsocket_id, timeout, on_success_callback, on_failure_callback) {
-    rtc_get_msg_sync(unixsocket_id).then(function (res) {
-        on_success_callback(res.from_unixsocket_id, res.msg);
-    }).catch(function (reason) {
-        on_failure_callback(reason);
-    });
+// Calls the callback successively with each peer connected to the local socket.
+// Provides: pcl_jsapi_get_all_remote_sockets
+function pcl_jsapi_get_all_remote_sockets(local_unixsocket_id, callback) {
+    var remotes = Object.keys(PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT);
+    for (var i = 0; i < remotes.length; i++) {
+        callback(remotes[i]);
+    }
 }
 
 /** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
