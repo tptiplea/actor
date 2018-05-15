@@ -21,18 +21,20 @@ let got_message_from_client remote_socket msg =
     sent_message_to_client
     (fail_callback "REPLYING TO CLIENT")
 
+let on_msg_callback remote local msg =
+  if (PCLB.local_sckt_t_to_string local) <> (PCLB.local_sckt_t_to_string my_addr)
+  then print_string "SERVER: ERROR! Got message on a different local socket!"
+  else
+    got_message_from_client remote msg
+
 let bound_address () =
-  print_string "SERVER: Sucessfully bound address, listening on it!\n";
-  PCLB.pcl_recv_msg
-    my_addr
-    60000
-    got_message_from_client
-    (fail_callback "GETTING MESSAGE FROM CLIENT")
+  print_string "SERVER: Sucessfully bound address, listening on it!\n"
 
 let connected_to_signalling_server id =
   ("CLIENT: connected to signalling server with id" ^ id ^ "!\n") |> print_string;
   PCLB.pcl_bind_address
     my_addr
+    on_msg_callback
     bound_address
     (fail_callback "BINDING ADDRESS")
 

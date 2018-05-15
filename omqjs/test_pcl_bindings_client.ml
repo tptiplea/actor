@@ -14,14 +14,29 @@ let got_reply_from_server remote_sckt msg =
   (if remote_sckt = PCConf._test_server_addr then "YES\n" else "NO\n") |> print_string;
   print_string "CLIENT is done! Everything went well I guess\n"
 
-let sent_message_to_test_server local_scket () =
-  "CLIENT: Sent message to TEST server!\n" |> print_string;
-  PCLB.pcl_recv_msg
-    local_scket
-    60000
-    got_reply_from_server
-    (fail_callback "GETTING REPLY FROM SERVER")
+let was_request_sent = ref false
+let my_local_addr = ref ""
 
+let sent_message_to_test_server () =
+  "CLIENT: Sent message to TEST server!\n" |> print_string;
+  was_request_sent := true
+
+let on_msg_callback remote local msg =
+  if not !was_request_sent
+  then print_string "\n\n!!!!!!!!!! CLIENT: ERROR. Got message before the request was sent to the server!!\n\n"
+  else (
+    if PCLB.local_sckt_t_to_string local
+           <> PCLB.local_sckt_t_to_string local
+    then
+      print_string "\n\n!!!! CLIENT: ERROR. Message dest addr and local addr do not correspond!\n\n"
+    else (
+      if PCLB.remote_sckt_t_to_string remote
+         <> PCLB.remote_sckt_t_to_string test_server_addr
+      then
+        print_string "\n\n!!!! CLIENT: ERROR. Message is not from server!!\n\n"
+      else got_reply_from_server remote msg
+    )
+  )
 
 let connected_to_test_server local_scket =
   let str_local_sckt = Pcl_bindings.local_sckt_t_to_string local_scket in
@@ -30,13 +45,14 @@ let connected_to_test_server local_scket =
     local_scket
     test_server_addr
     (PCLB.string_to_msg_t "Hi there SERVER, I am CLIENT 111!")
-    (sent_message_to_test_server local_scket)
+    sent_message_to_test_server
     (fail_callback "SENDING_MESSAGE_TO_TEST_SERVER")
 
 let connected_to_signalling_server id =
   "CLIENT: connected to signalling server with id" ^ id ^ "!\n" |> print_string;
   PCLB.pcl_connect_to_address
     test_server_addr
+    on_msg_callback
     connected_to_test_server
     (fail_callback "CONNECT_TO_TEST_SERVER")
 
