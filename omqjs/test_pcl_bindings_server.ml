@@ -13,7 +13,7 @@ let got_message_from_client remote_socket msg =
   let msg = PCLB.msg_t_to_string msg in
   "SERVER: Got message: " ^ msg ^ "\n" |> print_string;
   "SERVER: From remote_socket: " ^ str_remote_socket ^ "\n" |> print_string;
-  print_string "SERVER: Replying to client!";
+  print_string "SERVER: Replying to client!\n";
   PCLB.pcl_send_msg
     my_addr
     remote_socket
@@ -23,9 +23,17 @@ let got_message_from_client remote_socket msg =
 
 let on_msg_callback remote local msg =
   if (PCLB.local_sckt_t_to_string local) <> (PCLB.local_sckt_t_to_string my_addr)
-  then print_string "SERVER: ERROR! Got message on a different local socket!"
+  then print_string "SERVER: ERROR! Got message on a different local socket!\n"
   else
     got_message_from_client remote msg
+
+let on_connection_to_callback local remote kind =
+  "SERVER: Got a new connection on local :" ^ (PCLB.local_sckt_t_to_string local) ^ "\n" |> print_string;
+  (match kind with
+    true -> "SERVER: The remote " ^ (PCLB.remote_sckt_t_to_string remote) ^ " is connected\n\n" |> print_string
+   |false -> "SERVER: The remote " ^ (PCLB.remote_sckt_t_to_string remote) ^ " is DISCconnected\n\n" |> print_string);
+  Pervasives.flush Pervasives.stdout
+
 
 let bound_address () =
   print_string "SERVER: Sucessfully bound address, listening on it!\n"
@@ -35,6 +43,7 @@ let connected_to_signalling_server id =
   PCLB.pcl_bind_address
     my_addr
     on_msg_callback
+    on_connection_to_callback
     bound_address
     (fail_callback "BINDING ADDRESS")
 

@@ -33,7 +33,7 @@ var PCL_VARS = {
     TOTAL_MESSAGES_SENT : 0,
     UNIXSOCKET_ID_TO_WEBRTC_DICT : {}, // keep track of unixsocket ids bound on this server
     PROMISES_DICT : {}, // keep track of promises
-    RTC_UNIXSOCKET_ONMSGCALLBACK : {} // a callback called with two arguments, (from, msg) on each message rcvd for that unixsocket
+    RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO : {} // a callback called with two arguments, (from, msg) on each message rcvd for that unixsocket
 };
 ////**************************************************************** VARIABLES **********************************
 ////**************************************************************** VARIABLES **********************************
@@ -150,12 +150,15 @@ function process_msg_from_server(msg) {
 // Returns a promise resolved when the address is bound correctly.
 // Provides: register_unixsocket_id
 // Requires: PCL_VARS, PCL_CONSTS, promise_name_for_register_unixsocket_id, send_msg_to_server, log_error, create_promise
-function register_unixsocket_id(unixsocket_id, on_msg_callback) {
+function register_unixsocket_id(unixsocket_id, on_msg_callback, on_connection_to_callback) {
     if (unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT) {
         return Promise.reject("Unixsocket with id " + unixsocket_id + " already bound");
     }
     PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id] = {}; // all the sockets we are connected to.
-    PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id] = on_msg_callback;
+    PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[unixsocket_id] = {
+        'on_msg_callback' : on_msg_callback,
+        'on_connection_to_callback' : on_connection_to_callback
+    };
 
     var promise_name = promise_name_for_register_unixsocket_id(unixsocket_id);
     var promise = create_promise(promise_name, 120 * 1000);
@@ -167,7 +170,7 @@ function register_unixsocket_id(unixsocket_id, on_msg_callback) {
         return promise;
     }).catch(function (reason) {
         delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
-        delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id];
+        delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[unixsocket_id];
         log_error(reason);
         throw reason; // Pass the error forward
     });
@@ -180,7 +183,7 @@ function unregister_unixsocket_id(unixsocket_id) {
         return Promise.reject("Unixsocket with id " + unixsocket_id + " not bound!");
     }
     delete PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[unixsocket_id];
-    delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[unixsocket_id];
+    delete PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[unixsocket_id];
 
     var promise_name = promise_name_for_unregister_unixsocket_id(unixsocket_id);
     var promise = create_promise(promise_name, 120 * 1000);
@@ -299,6 +302,9 @@ function send_msg_to_unixsocket(from_unixsocket_id, to_unixsocket_id, payload) {
 
 // Tear down an RTCPeerConnection, if one is available.
 function tear_down_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id) {
+    if (me_unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO) {
+        PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[me_unixsocket_id].on_connection_to_callback(me_unixsocket_id, other_unixsocket_id, false);
+    }
     if (!(me_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT)
         || !(other_unixsocket_id in PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT[me_unixsocket_id])) {
         // no connection, no need for tear down.
@@ -382,7 +388,11 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
         };
     }
 
-    return open_channel_promise.catch(function (reason) {
+    return open_channel_promise.then(function (channel) {
+        // Notify the listener of a new connection.
+        PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[me_unixsocket_id].on_connection_to_callback(me_unixsocket_id, other_unixsocket_id, true);
+        return channel;
+    }).catch(function (reason) {
         // Make sure to teardown the connection here.
         tear_down_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id);
         throw reason; // But pass the error forward.
@@ -394,13 +404,13 @@ function set_up_rtcpeerconnection(me_unixsocket_id, other_unixsocket_id, am_call
 // This will be a new socket.
 // Provides: connect_to_unixsocket
 // Requires: PCL_VARS, PCL_CONSTS, get_unused_unixsocket_id, register_unixsocket_id, set_up_rtcpeerconnection
-function connect_to_unixsocket(to_unixsocket_id, on_msg_callback) {
+function connect_to_unixsocket(to_unixsocket_id, on_msg_callback, on_connection_to_callback) {
     var from_unixsocket_id = get_unused_unixsocket_id();
     // This will contain the result of the connection, either the from_unixsocket_id connected to this
     // Or a failure.
 
     // Register the listening unixsocket.
-    return register_unixsocket_id(from_unixsocket_id, on_msg_callback).then(function (_) {
+    return register_unixsocket_id(from_unixsocket_id, on_msg_callback, on_connection_to_callback).then(function (_) {
         // Set up the rtcpeerconnection.
         return set_up_rtcpeerconnection(from_unixsocket_id, to_unixsocket_id, true);
 
@@ -424,9 +434,9 @@ function connect_to_unixsocket(to_unixsocket_id, on_msg_callback) {
 // Provides: rtc_process_received_message
 // Requires: PCL_VARS, PCL_CONSTS
 function rtc_process_received_message(from_unixsocket_id, to_unixsocket_id, msg) {
-    if (to_unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK) {
+    if (to_unixsocket_id in PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO) {
         // Call the callback.
-        (PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK[to_unixsocket_id])(from_unixsocket_id, to_unixsocket_id, msg);
+        (PCL_VARS.RTC_UNIXSOCKET_ONMSGCALLBACK_AND_ONCONNECTIONTO[to_unixsocket_id].on_msg_callback)(from_unixsocket_id, to_unixsocket_id, msg);
     } else {
         // Drop it.
     }
@@ -477,8 +487,8 @@ function pcl_jsapi_start_comm_layer(signalling_server_url, on_success_callback, 
 // calling the on_success_callback on success, or the failure_callback with the reason on fail.
 // Provides: pcl_jsapi_bind_address
 // Requires: register_unixsocket_id
-function pcl_jsapi_bind_address(unixsocket_id, on_msg_callback, on_success_callback, on_failure_callback) {
-    register_unixsocket_id(unixsocket_id, on_msg_callback).then(function (_) {
+function pcl_jsapi_bind_address(unixsocket_id, on_msg_callback, on_connection_to_callback, on_success_callback, on_failure_callback) {
+    register_unixsocket_id(unixsocket_id, on_msg_callback, on_connection_to_callback).then(function (_) {
         on_success_callback();
     }).catch(function (reason) {
         on_failure_callback(reason);
@@ -502,8 +512,8 @@ function pcl_jsapi_deallocate_address(unixsocket_id, on_success_callback, on_fai
 // or the failure_callback if some error occurred.
 // Provide: pcl_jsapi_connect_to_address
 // Requires: connect_to_unixsocket
-function pcl_jsapi_connect_to_address(to_unixsocket_id, on_msg_callback, on_success_callback, on_failure_callback) {
-    connect_to_unixsocket(to_unixsocket_id, on_msg_callback).then(function (from_unixsocket_id) {
+function pcl_jsapi_connect_to_address(to_unixsocket_id, on_msg_callback, on_connection_to_callback, on_success_callback, on_failure_callback) {
+    connect_to_unixsocket(to_unixsocket_id, on_msg_callback, on_connection_to_callback).then(function (from_unixsocket_id) {
         on_success_callback(from_unixsocket_id);
     }).catch(function (reason) {
         on_failure_callback(reason);
@@ -521,15 +531,6 @@ function pcl_jsapi_send_msg(from_unixsocket_id, to_unixsocket_id, msg, on_succes
     }).catch(function (reason) {
         on_failure_callback(reason);
     });
-}
-
-// Calls the callback successively with each peer connected to the local socket.
-// Provides: pcl_jsapi_get_all_remote_sockets
-function pcl_jsapi_get_all_remote_sockets(local_unixsocket_id, callback) {
-    var remotes = Object.keys(PCL_VARS.UNIXSOCKET_ID_TO_WEBRTC_DICT);
-    for (var i = 0; i < remotes.length; i++) {
-        callback(remotes[i]);
-    }
 }
 
 /** ------------------------------------------------   jsapi WITH CALLBACKS ------------------------------- */
@@ -718,41 +719,4 @@ function __pcljs_test() {
     }, function (reason) { console.log('Failed to register unixsocket_id', MY_SOCKET_ID, 'with reason', reason); });
 }
 
-function __pcljs_test2() {
-    start_pcl_layer(SIGNALLING_SERVER_URL);
-    var am_server = true;
-    var SERVER_SOCKET_ID = "unixsocket_for_server";
-
-    if (am_server) {
-        console.log('I AM SERVER, binding address ', SERVER_SOCKET_ID);
-        register_unixsocket_id(SERVER_SOCKET_ID).then(function (_) {
-            return rtc_get_msg_sync(SERVER_SOCKET_ID);
-        }).then(function (msg) {
-            var from_unixsocket_id = msg.from_unixsocket_id;
-            var msg = msg.msg;
-            console.log('SERVER: Got message', msg, 'from client with socket id', from_unixsocket_id);
-
-            return rtc_send_msg(SERVER_SOCKET_ID, from_unixsocket_id, 'HI THERE CLIENT, thanks for msg - ' + msg);
-        }).then(function (_) {
-            console.log('SERVER IS DONE');
-        }).catch(log_error);
-    } else {
-        console.log('I AM CLIENT, waiting to connect to server');
-        connect_to_unixsocket(SERVER_SOCKET_ID).then(function (my_socket_id) {
-            console.log('I am client, connected to server with my socket', my_socket_id);
-            return rtc_send_msg(my_socket_id, SERVER_SOCKET_ID, 'HI Server, I am client with id' + my_socket_id)
-                .then(function (_) {
-                    return my_socket_id;
-                });
-        }).then(function (my_socket_id) {
-            return rtc_get_msg_sync(my_socket_id);
-        }).then(function (msg) {
-            var from_unixsocket_id = msg.from_unixsocket_id;
-            var msg = msg.msg;
-            console.log('CLIENT: Got message', msg, 'from server with socket id', from_unixsocket_id);
-            console.log('The from should be the same as socket:', from_unixsocket_id === SERVER_SOCKET_ID);
-            console.log('CLIENT: I am done');
-        }).catch(log_error);
-    }
-}
 // ---------------------------------------------------------------------- TEST

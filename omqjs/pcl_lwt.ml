@@ -10,7 +10,7 @@ let promise_start_comm_layer server_url =
   Pcl_bindings.pcl_start_comm_layer server_url ok_callback fail_callback;
   promise
 
-let promise_bind_address socket on_msg_callback =
+let promise_bind_address socket on_msg_callback on_connection_to_callback =
   let promise, resolver = Lwt.task () in
   let ok_callback = (fun () -> Lwt.wakeup_later resolver ()) in
   let fail_callback =
@@ -18,7 +18,7 @@ let promise_bind_address socket on_msg_callback =
       ~context:("fail: cannot bind " ^ (Pcl_bindings.local_sckt_t_to_string socket))
       resolver
   in
-  Pcl_bindings.pcl_bind_address socket on_msg_callback ok_callback fail_callback;
+  Pcl_bindings.pcl_bind_address socket on_msg_callback on_connection_to_callback ok_callback fail_callback;
   promise
 
 let promise_deallocate_address socket =
@@ -33,7 +33,7 @@ let promise_deallocate_address socket =
   promise
 
 
-let promise_connect_to_address remote_socket on_msg_callback =
+let promise_connect_to_address remote_socket on_msg_callback on_connection_to_callback =
   let promise, resolver = Lwt.task () in
   let ok_callback = (fun local_socket -> Lwt.wakeup_later resolver local_socket) in
   let fail_callback =
@@ -42,7 +42,7 @@ let promise_connect_to_address remote_socket on_msg_callback =
                 (Pcl_bindings.remote_sckt_t_to_string remote_socket))
       resolver
   in
-  Pcl_bindings.pcl_connect_to_address remote_socket on_msg_callback ok_callback fail_callback;
+  Pcl_bindings.pcl_connect_to_address remote_socket on_msg_callback on_connection_to_callback ok_callback fail_callback;
   promise
 
 let promise_send_msg local remote msg =

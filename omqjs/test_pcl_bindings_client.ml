@@ -48,11 +48,19 @@ let connected_to_test_server local_scket =
     sent_message_to_test_server
     (fail_callback "SENDING_MESSAGE_TO_TEST_SERVER")
 
+let on_connection_to_callback local remote kind =
+  "CLIENT: Got a new connection on local :" ^ (PCLB.local_sckt_t_to_string local) ^ "\n\n" |> print_string;
+  (match kind with
+    true -> "CLIENT: The remote " ^ (PCLB.remote_sckt_t_to_string remote) ^ " is connected\n\n" |> print_string
+   |false -> "CLIENT: The remote " ^ (PCLB.remote_sckt_t_to_string remote) ^ " is DISCconnected\n\n" |> print_string);
+  Pervasives.flush Pervasives.stdout
+
 let connected_to_signalling_server id =
   "CLIENT: connected to signalling server with id" ^ id ^ "!\n" |> print_string;
   PCLB.pcl_connect_to_address
     test_server_addr
     on_msg_callback
+    on_connection_to_callback
     connected_to_test_server
     (fail_callback "CONNECT_TO_TEST_SERVER")
 

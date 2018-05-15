@@ -25,6 +25,9 @@ type fail_callback_t = fail_reason_t -> unit
 (** A callback called with a message *)
 type on_msg_callback_t = remote_sckt_t -> local_sckt_t -> msg_t -> unit
 
+(** A callback for when a remote socket is either connected to or disconnected from the local socket *)
+type on_connection_to_callback_t = local_sckt_t -> remote_sckt_t -> bool -> unit
+
 (**
    Function that starts the communication layer and calls the callback when
    connected to the signalling server.
@@ -38,7 +41,7 @@ val pcl_start_comm_layer : string -> (string -> unit) -> fail_callback_t -> unit
    Function that binds an address (must be unique),
    calling the first callback on success, or the other on failure.
 *)
-val pcl_bind_address : local_sckt_t -> on_msg_callback_t -> (unit -> unit) -> fail_callback_t -> unit
+val pcl_bind_address : local_sckt_t -> on_msg_callback_t -> on_connection_to_callback_t -> (unit -> unit) -> fail_callback_t -> unit
 
 
 (**
@@ -51,7 +54,7 @@ val pcl_deallocate_address : local_sckt_t -> (unit -> unit) -> fail_callback_t -
    the unixsocket_id we are connected with to that address, or the
    failure_callback if some error occurred.
 *)
-val pcl_connect_to_address : remote_sckt_t -> on_msg_callback_t -> (local_sckt_t -> unit) -> fail_callback_t -> unit
+val pcl_connect_to_address : remote_sckt_t -> on_msg_callback_t -> on_connection_to_callback_t -> (local_sckt_t -> unit) -> fail_callback_t -> unit
 
 (**
    Function that sends a message from a unixsocket A to another unixsocket B.
@@ -61,8 +64,3 @@ val pcl_connect_to_address : remote_sckt_t -> on_msg_callback_t -> (local_sckt_t
    pcl_send_msg unixsocket_A unixsocket_B msg on_success_callback on_failure_callback
 *)
 val pcl_send_msg : local_sckt_t -> remote_sckt_t -> msg_t -> (unit -> unit) -> fail_callback_t -> unit
-
-(**
-   Function that calls the callback with all remote sockets available.
-   *)
-val pcl_get_all_remote_sockets : local_sckt_t -> (remote_sckt_t -> unit) -> unit

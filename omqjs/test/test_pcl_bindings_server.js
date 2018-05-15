@@ -730,24 +730,30 @@
      _f_=caml_new_string("\n"),
      _g_=caml_new_string("Was executing operation "),
      _h_=caml_new_string("\n\n-------------------"),
-     _r_=caml_new_string("!\n"),
-     _s_=caml_new_string("CLIENT: connected to signalling server with id"),
-     _t_=caml_new_string("BINDING ADDRESS"),
-     _q_=
+     _x_=caml_new_string("!\n"),
+     _y_=caml_new_string("CLIENT: connected to signalling server with id"),
+     _z_=caml_new_string("BINDING ADDRESS"),
+     _w_=
       caml_new_string("SERVER: Sucessfully bound address, listening on it!\n"),
+     _q_=caml_new_string("\n"),
+     _r_=caml_new_string("SERVER: Got a new connection on local :"),
+     _u_=caml_new_string(" is connected\n\n"),
+     _v_=caml_new_string("SERVER: The remote "),
+     _s_=caml_new_string(" is DISCconnected\n\n"),
+     _t_=caml_new_string("SERVER: The remote "),
      _p_=
       caml_new_string
-       ("SERVER: ERROR! Got message on a different local socket!"),
+       ("SERVER: ERROR! Got message on a different local socket!\n"),
      _j_=caml_new_string("\n"),
      _k_=caml_new_string("SERVER: Got message: "),
      _l_=caml_new_string("\n"),
      _m_=caml_new_string("SERVER: From remote_socket: "),
-     _n_=caml_new_string("SERVER: Replying to client!"),
+     _n_=caml_new_string("SERVER: Replying to client!\n"),
      _o_=caml_new_string("REPLYING TO CLIENT"),
      _i_=
       caml_new_string("SERVER: Sucessfully replied to client! I AM DONE!\n"),
-     _u_=caml_new_string("I am the SERVER, trying to connect to server...\n"),
-     _v_=caml_new_string("START_PCL");
+     _A_=caml_new_string("I am the SERVER, trying to connect to server...\n"),
+     _B_=caml_new_string("START_PCL");
     function _a_(s1,s2)
      {var
        l1=caml_ml_string_length(s1),
@@ -767,9 +773,9 @@
            {var l=param$0[2],a=param$0[1];
             try
              {caml_ml_flush(a)}
-            catch(_z_)
-             {_z_ = caml_wrap_exception(_z_);
-              if(_z_[1] !== Sys_error)throw _z_}
+            catch(_F_)
+             {_F_ = caml_wrap_exception(_F_);
+              if(_F_[1] !== Sys_error)throw _F_}
             var param$0=l;
             continue}
           return 0}}
@@ -813,12 +819,12 @@
       print_string(_h_);
       return flush_all(0)}
     function ok_callback$0(param){return print_string(_i_)}
-    function ok_callback$1(param){return print_string(_q_)}
+    function ok_callback$1(param){return print_string(_w_)}
     function ok_callback$2(id)
-     {print_string(_a_(_s_,_a_(id,_r_)));
-      function fail_callback$1(_y_){return fail_callback$0(_t_,_y_)}
+     {print_string(_a_(_y_,_a_(id,_x_)));
+      function fail_callback$1(_E_){return fail_callback$0(_z_,_E_)}
       var address=">_test_server_addr_<";
-      function f_safe(js_str1,js_str2,js_str3)
+      function f_safe$0(js_str1,js_str2,js_str3)
        {var
          msg=caml_js_to_string(js_str3),
          local=caml_js_to_string(js_str2),
@@ -827,7 +833,7 @@
         print_string(_a_(_k_,_a_(msg,_j_)));
         print_string(_a_(_m_,_a_(remote,_l_)));
         print_string(_n_);
-        function fail_callback$1(_x_){return fail_callback$0(_o_,_x_)}
+        function fail_callback$1(_D_){return fail_callback$0(_o_,_D_)}
         var
          from_socket=">_test_server_addr_<",
          to_socket=remote.toString(),
@@ -836,14 +842,30 @@
          fail_callback=unsafe_wrap_string_arg_fun(fail_callback$1);
         return pcl_jsapi_send_msg_jsfun
                 (from_socket,to_socket,msg$0,ok_callback,fail_callback)}
+      var on_msg_callback=caml_js_wrap_callback(f_safe$0);
+      function f_safe(js_str1,js_str2,js_bool)
+       {var
+         kind=js_bool | 0,
+         remote=caml_js_to_string(js_str2),
+         local=caml_js_to_string(js_str1);
+        print_string(_a_(_r_,_a_(local,_q_)));
+        if(0 === kind)
+         print_string(_a_(_t_,_a_(remote,_s_)));
+        else
+         print_string(_a_(_v_,_a_(remote,_u_)));
+        return caml_ml_flush(oc)}
       var
-       on_msg_callback=caml_js_wrap_callback(f_safe),
+       on_connection_callback=caml_js_wrap_callback(f_safe),
        ok_callback=caml_js_wrap_callback(ok_callback$1),
        fail_callback=unsafe_wrap_string_arg_fun(fail_callback$1);
       return pcl_jsapi_bind_address_jsfun
-              (address,on_msg_callback,ok_callback,fail_callback)}
-    print_string(_u_);
-    function fail_callback$1(_w_){return fail_callback$0(_v_,_w_)}
+              (address,
+               on_msg_callback,
+               on_connection_callback,
+               ok_callback,
+               fail_callback)}
+    print_string(_A_);
+    function fail_callback$1(_C_){return fail_callback$0(_B_,_C_)}
     var
      server_url="http://localhost:3000",
      ok_callback=unsafe_wrap_string_arg_fun(ok_callback$2),

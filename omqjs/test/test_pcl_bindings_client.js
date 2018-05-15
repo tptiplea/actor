@@ -730,9 +730,15 @@
      _f_=caml_new_string("\n"),
      _g_=caml_new_string("Was executing operation "),
      _h_=caml_new_string("\n\n-------------------"),
-     _v_=caml_new_string("!\n"),
-     _w_=caml_new_string("CLIENT: connected to signalling server with id"),
-     _x_=caml_new_string("CONNECT_TO_TEST_SERVER"),
+     _B_=caml_new_string("!\n"),
+     _C_=caml_new_string("CLIENT: connected to signalling server with id"),
+     _D_=caml_new_string("CONNECT_TO_TEST_SERVER"),
+     _v_=caml_new_string("\n\n"),
+     _w_=caml_new_string("CLIENT: Got a new connection on local :"),
+     _z_=caml_new_string(" is connected\n\n"),
+     _A_=caml_new_string("CLIENT: The remote "),
+     _x_=caml_new_string(" is DISCconnected\n\n"),
+     _y_=caml_new_string("CLIENT: The remote "),
      _s_=caml_new_string("\n"),
      _t_=
       caml_new_string("CLIENT: Connected to TEST Server with local socket "),
@@ -755,8 +761,8 @@
      _l_=caml_new_string("YES\n"),
      _n_=caml_new_string("NO\n"),
      _m_=caml_new_string("CLIENT is done! Everything went well I guess\n"),
-     _y_=caml_new_string("I am the CLIENT, trying to connect to server...\n"),
-     _z_=caml_new_string("START_PCL");
+     _E_=caml_new_string("I am the CLIENT, trying to connect to server...\n"),
+     _F_=caml_new_string("START_PCL");
     function _a_(s1,s2)
      {var
        l1=caml_ml_string_length(s1),
@@ -776,9 +782,9 @@
            {var l=param$0[2],a=param$0[1];
             try
              {caml_ml_flush(a)}
-            catch(_E_)
-             {_E_ = caml_wrap_exception(_E_);
-              if(_E_[1] !== Sys_error)throw _E_}
+            catch(_K_)
+             {_K_ = caml_wrap_exception(_K_);
+              if(_K_[1] !== Sys_error)throw _K_}
             var param$0=l;
             continue}
           return 0}}
@@ -826,7 +832,7 @@
      {print_string(_o_);was_request_sent[1] = 1;return 0}
     function ok_callback$1(str_local_sckt)
      {print_string(_a_(_t_,_a_(str_local_sckt,_s_)));
-      function fail_callback$1(_D_){return fail_callback$0(_u_,_D_)}
+      function fail_callback$1(_J_){return fail_callback$0(_u_,_J_)}
       var
        from_socket=str_local_sckt.toString(),
        to_socket=">_test_server_addr_<",
@@ -836,10 +842,10 @@
       return pcl_jsapi_send_msg_jsfun
               (from_socket,to_socket,msg,ok_callback,fail_callback)}
     function ok_callback$2(id)
-     {print_string(_a_(_w_,_a_(id,_v_)));
-      function fail_callback$1(_C_){return fail_callback$0(_x_,_C_)}
+     {print_string(_a_(_C_,_a_(id,_B_)));
+      function fail_callback$1(_I_){return fail_callback$0(_D_,_I_)}
       var address=">_test_server_addr_<";
-      function f_safe(js_str1,js_str2,js_str3)
+      function f_safe$0(js_str1,js_str2,js_str3)
        {var
          msg=caml_js_to_string(js_str3),
          local=caml_js_to_string(js_str2),
@@ -852,18 +858,34 @@
           print_string(msg);
           print_string(_j_);
           print_string(_k_);
-          var _B_=caml_string_equal(remote,test_server_addr)?_l_:_n_;
-          print_string(_B_);
+          var _H_=caml_string_equal(remote,test_server_addr)?_l_:_n_;
+          print_string(_H_);
           return print_string(_m_)}
         return print_string(_r_)}
+      var on_msg_callback=caml_js_wrap_callback(f_safe$0);
+      function f_safe(js_str1,js_str2,js_bool)
+       {var
+         kind=js_bool | 0,
+         remote=caml_js_to_string(js_str2),
+         local=caml_js_to_string(js_str1);
+        print_string(_a_(_w_,_a_(local,_v_)));
+        if(0 === kind)
+         print_string(_a_(_y_,_a_(remote,_x_)));
+        else
+         print_string(_a_(_A_,_a_(remote,_z_)));
+        return caml_ml_flush(oc)}
       var
-       on_msg_callback=caml_js_wrap_callback(f_safe),
+       on_connection_callback=caml_js_wrap_callback(f_safe),
        ok_callback=unsafe_wrap_string_arg_fun(ok_callback$1),
        fail_callback=unsafe_wrap_string_arg_fun(fail_callback$1);
       return pcl_jsapi_connect_to_address_jsfun
-              (address,on_msg_callback,ok_callback,fail_callback)}
-    print_string(_y_);
-    function fail_callback$1(_A_){return fail_callback$0(_z_,_A_)}
+              (address,
+               on_msg_callback,
+               on_connection_callback,
+               ok_callback,
+               fail_callback)}
+    print_string(_E_);
+    function fail_callback$1(_G_){return fail_callback$0(_F_,_G_)}
     var
      server_url="http://localhost:3000",
      ok_callback=unsafe_wrap_string_arg_fun(ok_callback$2),
