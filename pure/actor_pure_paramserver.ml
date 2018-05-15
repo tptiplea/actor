@@ -100,7 +100,7 @@ let service_loop () =
       let k = Marshal.from_string m.par.(0) 0 in
       let v, t' = _get k in
       let s = to_msg t' OK [| Marshal.to_string v [] |] in
-      Actor_pure_zmq_repl.send_all ~block:false !_context.myself_sock [i;s]
+      Actor_pure_zmq_repl.send_all ~block:false !_context.myself_sock (i, s)
       )
     | PS_Set -> (
       Owl_log.debug "%s: ps_set\n" !_context.myself_addr;

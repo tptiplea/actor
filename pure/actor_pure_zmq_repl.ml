@@ -42,7 +42,7 @@ let send ?(block=true) v m = Lwt.return (Zmq.Socket.send ~block v m)
 (* *)
 
 (* Used in lib/actor_paramserver *)
-let send_all ?(block=true) v m = Lwt.return (Zmq.Socket.send_all ~block v m)
+let send_all ?(block=true) v (m1, m2) = Lwt.return (Zmq.Socket.send_all ~block v [m1; m2])
 (* val send : ?block:bool -> ?more:bool -> 'a t -> string -> unit *)
 
 (* Used in src/actor_worker *)

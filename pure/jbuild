@@ -34,6 +34,7 @@
   (names        (actor_pure_manager actor_pure_worker test_pure_parameter test_pure_owl_parallel))
   (package actor_pure)
 
+  (modes (byte))
   (preprocess (pps (lwt_ppx)))
   (modules (actor_pure_manager actor_pure_worker test_pure_parameter test_pure_owl_parallel))
   (libraries (

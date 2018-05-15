@@ -24,16 +24,10 @@ let test_neural_parallel () =
   let params = Params.config
     ~batch:(Batch.Mini 100) ~learning_rate:(Learning_Rate.Adagrad 0.002) 0.05 in
   *)
-  let chkpt state =
-    if Checkpoint.(state.current_batch mod 1 = 0) then (
-      Checkpoint.(state.stop <- true);
-      (* Log.info "sync model with server" *)
-    )
-  in
 
   let params = Params.config
     ~batch:(Batch.Sample 100) ~learning_rate:(Learning_Rate.Adagrad 0.001)
-    ~checkpoint:(Checkpoint.Custom chkpt) ~stopping:(Stopping.Const 1e-6) 10.
+    ~checkpoint:(Checkpoint.None) ~stopping:(Stopping.Const 1e-6) 10.
   in
   let url = Actor_pure_config.manager_addr in
   let jid = Sys.argv.(1) in
