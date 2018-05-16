@@ -4,7 +4,7 @@ let _ =
   print_string ">>>TEST: I am the OMQ SERVER, trying to setup my listening REP OMQ Socket\n";
   let%lwt (unique_id, ctx) = Omq_context.create Pcl_config.signalling_server_url in
   Printf.printf ">>>TEST: Connected to signalling server, got context with id (%s)\n" unique_id;
-  let sckt = Omq_context.create_socket ctx Omq_types.REP in
+  let sckt = Omq_context.create_rep_socket ctx in
   let%lwt () = Omq_socket.bind_local sckt my_addr in
   Printf.printf ">>>TEST: Sucessfully bound addr, listening on %s\n" (Pcl_bindings.local_sckt_t_to_string my_addr);
   Printf.printf ">>>TEST: Waiting for request from client\n";
@@ -15,7 +15,7 @@ let _ =
   let my_msg = "Hi there, client! This is your reply from OMQ Test Server!!" |> Omq_socket.string_to_omq_msg_t in
   let%lwt () = Omq_socket.send_msg ~block:true sckt my_msg in
   Printf.printf ">>>TEST: I am about to close down!\n";
-  Omq_context.close_socket ctx sckt;
+  Omq_context.close_rep_socket ctx sckt;
   Printf.printf ">>>TEST: Sucessfully closed socket! About to close context!\n";
   Omq_context.terminate ctx;
   Printf.printf ">>>TEST: ALL DONE!!!\n";

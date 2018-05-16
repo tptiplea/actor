@@ -31,9 +31,9 @@ let _last_op_from_sckt_state = function
    If it is in a blocking state, then it cannot perform any other operation!
    So in that case, it throws an error if someone tries to do another operation on it.
    *)
-type omq_socket_t = {
+type 'a omq_socket_t = {
   (* the kind of socket *)
-  kind : omq_sckt_kind;
+  kind : 'a;
   (* whether it is open *)
   mutable is_open : bool;
   (* whether it is in a blocking state *)
@@ -227,11 +227,9 @@ let _recv_msg_with_id_any_sckt sckt =
       ~timeout_ms ~blocked_state ~unblocked_state ~timeout_during
   )
 
-let recv_msg_with_id sckt =
+let recv_msg_with_id (sckt : [< `ROUTER] omq_socket_t) =
   _ensure_not_blocked_and_open sckt;
-  match sckt.kind with
-    ROUTER -> _recv_msg_with_id_any_sckt sckt
-  | k -> OMQ_Exception ("Cannot get identity from socket of kind " ^ Omq_types.omq_sckt_kind_to_string k) |> Lwt.fail
+  _recv_msg_with_id_any_sckt sckt
 
 let recv_msg sckt =
   _ensure_not_blocked_and_open sckt;
@@ -239,17 +237,17 @@ let recv_msg sckt =
   Lwt.return msg
 
 (* Send a message, either blocking or non-blocking *)
-let send_msg ?(block=true) sckt ?dest_omq_id msg =
+let send_msg ?(block=true) sckt msg =
   _ensure_not_blocked_and_open sckt;
   (* the message will contain the id (mine) as the first frame *)
   let msg = _pack_to_raw_msg sckt.identity msg in
   match sckt.kind with
-    REQ -> (
+    `REQ -> (
       match _last_op_from_sckt_state sckt.state with
         Send (_, _) -> OMQ_Exception "Called send twice in a row on a REQ socket" |> Lwt.fail
       | _ -> _round_robin_send_msg ~block sckt msg (* send in round robin style to one of the connected services *)
     )
-  | REP -> (
+  | `REP -> (
       match _last_op_from_sckt_state sckt.state with
         Recv (remote, local) -> (
           match sckt.connections_to |> RemoteSocketMap.mem remote with
@@ -259,20 +257,20 @@ let send_msg ?(block=true) sckt ?dest_omq_id msg =
       | Send (_, _) -> OMQ_Exception "Called send twice in a row on a REP socket" |> Lwt.fail
       | None -> OMQ_Exception "Called send before any recv on a REP socket" |> Lwt.fail
     )
-  | DEALER -> _round_robin_send_msg ~block sckt msg (* send in round robin style *)
-  | ROUTER -> (
-      match dest_omq_id with
-        None -> OMQ_Exception "Must provide OMQ Socket Identity when sending on Router socket" |> Lwt.fail
-      | Some dest_omq_id ->
-        let connection = OmqSocketIdMap.find_opt dest_omq_id sckt.routing_table in
-        match connection with
-          Some (local, remote) -> (
-            sckt.state <- NotBlocked (Send (local, remote));
-            Pcl_lwt.promise_send_msg local remote msg
-          )
-        (* does not exist anymore, discard the message silently, as in the OMQ doc *)
-        | None -> Lwt.return ()
+  | `DEALER -> _round_robin_send_msg ~block sckt msg (* send in round robin style *)
+
+let send_msg_with_id sckt dest_omq_id msg =
+  _ensure_not_blocked_and_open sckt;
+  (* the message will contain the id (mine) as the first frame *)
+  let msg = _pack_to_raw_msg sckt.identity msg in
+  let connection = OmqSocketIdMap.find_opt dest_omq_id sckt.routing_table in
+  match connection with
+    Some (local, remote) -> (
+      sckt.state <- NotBlocked (Send (local, remote));
+      Pcl_lwt.promise_send_msg local remote msg
     )
+  (* does not exist anymore, discard the message silently, as in the OMQ doc *)
+  | None -> Lwt.return ()
 
 let set_send_high_water_mark sckt hwm = _ensure_not_blocked_and_open sckt; sckt.send_high_water_mark <- hwm
 let get_send_high_water_mark sckt = _ensure_not_blocked_and_open sckt; sckt.send_high_water_mark
@@ -283,20 +281,65 @@ let set_recv_timeoutms sckt tm = _ensure_not_blocked_and_open sckt; sckt.recv_ti
 let set_identity sckt id = _ensure_not_blocked_and_open sckt; sckt.identity <- id
 let get_identity sckt = _ensure_not_blocked_and_open sckt; sckt.identity
 
-let _internal_create k = {
-  kind = k;
-  is_open = true;
-  state = NotBlocked None;
-  identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
-  listening_on = LocalSocketSet.empty;
-  connections_to = RemoteSocketMap.empty;
-  routing_table = OmqSocketIdMap.empty;
-  send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
-  recv_timeout_ms = Pervasives.max_int;
-  send_high_water_mark = 10_000;
-  recv_high_water_mark = 10_000;
-  in_msg_q = Queue.create ();
-}
+let _internal_create_req = function () -> {
+    kind = `REQ;
+    is_open = true;
+    state = NotBlocked None;
+    identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
+    listening_on = LocalSocketSet.empty;
+    connections_to = RemoteSocketMap.empty;
+    routing_table = OmqSocketIdMap.empty;
+    send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
+    recv_timeout_ms = Pervasives.max_int;
+    send_high_water_mark = 10_000;
+    recv_high_water_mark = 10_000;
+    in_msg_q = Queue.create ();
+  }
+
+let _internal_create_rep = function () -> {
+    kind = `REP;
+    is_open = true;
+    state = NotBlocked None;
+    identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
+    listening_on = LocalSocketSet.empty;
+    connections_to = RemoteSocketMap.empty;
+    routing_table = OmqSocketIdMap.empty;
+    send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
+    recv_timeout_ms = Pervasives.max_int;
+    send_high_water_mark = 10_000;
+    recv_high_water_mark = 10_000;
+    in_msg_q = Queue.create ();
+  }
+
+let _internal_create_dealer = function () -> {
+    kind = `DEALER;
+    is_open = true;
+    state = NotBlocked None;
+    identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
+    listening_on = LocalSocketSet.empty;
+    connections_to = RemoteSocketMap.empty;
+    routing_table = OmqSocketIdMap.empty;
+    send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
+    recv_timeout_ms = Pervasives.max_int;
+    send_high_water_mark = 10_000;
+    recv_high_water_mark = 10_000;
+    in_msg_q = Queue.create ();
+  }
+
+let _internal_create_router = function () -> {
+    kind = `ROUTER;
+    is_open = true;
+    state = NotBlocked None;
+    identity = Pcl_bindings.pcl_util_rand_str 20; (* random identity by default *)
+    listening_on = LocalSocketSet.empty;
+    connections_to = RemoteSocketMap.empty;
+    routing_table = OmqSocketIdMap.empty;
+    send_timeout_ms = Pervasives.max_int; (* do not timeout by default *)
+    recv_timeout_ms = Pervasives.max_int;
+    send_high_water_mark = 10_000;
+    recv_high_water_mark = 10_000;
+    in_msg_q = Queue.create ();
+  }
 
 let _internal_close sckt =
   if not sckt.is_open
