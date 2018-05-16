@@ -3,8 +3,8 @@ var JSL_VARS = {
 };
 
 // Get the sys args from the url. These must come at the end of the url, having the format ?args= JSON string list of args.
-function pcl_jsapi_get_sysargs() {
-    var jobname = pcl_jsapi_get_job_name();
+function jsl_jsapi_get_sysargs() {
+    var jobname = jsl_jsapi_get_job_name();
 
     var href = decodeURIComponent(document.location.href);
     console.log(href);
@@ -26,7 +26,7 @@ function pcl_jsapi_get_sysargs() {
 }
 
 // Get the job name of the current script, based on the url of the current script.
-function pcl_jsapi_get_job_name() {
+function jsl_jsapi_get_job_name() {
     try {
         return document.getElementById("actor_job_name").innerText;
     } catch (e) {
@@ -35,7 +35,7 @@ function pcl_jsapi_get_job_name() {
     }
 }
 
-function pcl_jsapi_spawn_job_with_args(job_name, args) {
+function jsl_jsapi_spawn_job_with_args(job_name, args) {
     var args = encodeURIComponent(JSON.stringify(args));
 
     var new_pathname = window.location.pathname.split('/').slice(0, -1).join("/");
@@ -83,8 +83,8 @@ function add_new_job_button(job_id, newUrl) {
 /** ----------------------------------------------------------- {HTMLutils ------------------------------- */
 
 function __test_stuff() {
-    console.log('Job name:', pcl_jsapi_get_job_name());
-    console.log('Command line args:', pcl_jsapi_get_sysargs());
-    pcl_jsapi_spawn_job_with_args("new_job1", ["abc", "2333b"]);
-    pcl_jsapi_spawn_job_with_args("new_job2", ["xyz", "2333b"]);
+    console.log('Job name:', jsl_jsapi_get_job_name());
+    console.log('Command line args:', jsl_jsapi_get_sysargs());
+    jsl_jsapi_spawn_job_with_args("new_job1", ["abc", "2333b"]);
+    jsl_jsapi_spawn_job_with_args("new_job2", ["xyz", "2333b"]);
 }
