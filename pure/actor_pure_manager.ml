@@ -1,5 +1,5 @@
 (** [ Manager ]
-  keeps running to manage a group of actors
+    keeps running to manage a group of actors
 *)
 
 open Actor_pure_types
@@ -26,36 +26,36 @@ let myid = Actor_pure_config.manager_id
 let process r m =
   match m.typ with
   | User_Reg -> (
-    let uid, addr = m.par.(0), m.par.(1) in
-    if Workers.mem uid = false then
-      Owl_log.info "%s\n" (uid ^ " @ " ^ addr);
+      let uid, addr = m.par.(0), m.par.(1) in
+      if Workers.mem uid = false then
+        Owl_log.info "%s\n" (uid ^ " @ " ^ addr);
       Workers.add uid addr;
       Actor_pure_utils.send r OK [||]
     )
   | Job_Reg -> (
-    let master, jid = m.par.(0), m.par.(1) in
-    if Actor_pure_service.mem jid = false then (
-      Actor_pure_service.add jid master;
-      (* FIXME: currently send back all nodes as workers *)
-      let addrs = Omq_utils.json_stringify (Workers.addrs ()) in
-      Actor_pure_utils.send r Job_Master [|addrs|] )
-    else
-      let master = (Actor_pure_service.find jid).master in
-      Actor_pure_utils.send r Job_Worker [|master|]
+      let master, jid = m.par.(0), m.par.(1) in
+      if Actor_pure_service.mem jid = false then (
+        Actor_pure_service.add jid master;
+        (* FIXME: currently send back all nodes as workers *)
+        let addrs = Omq_utils.json_stringify (Workers.addrs ()) in
+        Actor_pure_utils.send r Job_Master [|addrs|] )
+      else
+        let master = (Actor_pure_service.find jid).master in
+        Actor_pure_utils.send r Job_Worker [|master|]
     )
   | Heartbeat -> (
-    Owl_log.info "%s\n" ("heartbeat @ " ^ m.par.(0));
-    Workers.add m.par.(0) m.par.(1);
-    Actor_pure_utils.send r OK [||]
+      Owl_log.info "%s\n" ("heartbeat @ " ^ m.par.(0));
+      Workers.add m.par.(0) m.par.(1);
+      Actor_pure_utils.send r OK [||]
     )
   | P2P_Reg -> (
-    let addr, jid = m.par.(0), m.par.(1) in
-    Owl_log.info "p2p @ %s job:%s\n" addr jid;
-    if Actor_pure_service.mem jid = false then Actor_pure_service.add jid "";
-    let peers = Actor_pure_service.choose_workers jid 10 in
-    let peers = Omq_utils.json_stringify peers in
-    Actor_pure_service.add_worker jid addr;
-    Actor_pure_utils.send r OK [|peers|]
+      let addr, jid = m.par.(0), m.par.(1) in
+      Owl_log.info "p2p @ %s job:%s\n" addr jid;
+      if Actor_pure_service.mem jid = false then Actor_pure_service.add jid "";
+      let peers = Actor_pure_service.choose_workers jid 10 in
+      let peers = Omq_utils.json_stringify peers in
+      Actor_pure_service.add_worker jid addr;
+      Actor_pure_utils.send r OK [|peers|]
     )
   | _ -> Lwt.return (Owl_log.error "unknown message type\n")
 

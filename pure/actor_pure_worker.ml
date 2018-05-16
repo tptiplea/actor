@@ -1,5 +1,5 @@
 (** [ Actor ]
-  connect to Manager, represent a working node/actor.
+    connect to Manager, represent a working node/actor.
 *)
 
 open Actor_pure_types
@@ -49,23 +49,23 @@ let run id u_addr m_addr =
   while%lwt true do
     Omq_socket.set_recv_timeoutms rep (300 * 1000);
     try%lwt
-     let%lwt m_pack = Omq_socket.recv_msg rep in
-     let m = of_msg m_pack in
+      let%lwt m_pack = Omq_socket.recv_msg rep in
+      let m = of_msg m_pack in
       match m.typ with
       | Job_Create -> (
-        let app = m.par.(1) in
-        let arg = Omq_utils.json_parse m.par.(2) in
-        Owl_log.info "%s\n" (app ^ " <- " ^ m.par.(0));
-        Omq_socket.send_msg rep (Omq_utils.json_stringify OK |> Omq_socket.string_to_omq_msg_t);%lwt
-        match Sys.file_exists app with
-        | true ->  start_app app arg
-        | false -> deploy_app app
+          let app = m.par.(1) in
+          let arg = Omq_utils.json_parse m.par.(2) in
+          Owl_log.info "%s\n" (app ^ " <- " ^ m.par.(0));
+          Omq_socket.send_msg rep (Omq_utils.json_stringify OK |> Omq_socket.string_to_omq_msg_t);%lwt
+          match Sys.file_exists app with
+          | true ->  start_app app arg
+          | false -> deploy_app app
         )
       | _ -> Lwt.return ()
     with
-      | Unix.Unix_error (_,_,_) -> heartbeat req id u_addr m_addr
-      | Omq_types.OMQ_Exception s -> Lwt.return (Owl_log.error "%s\n" s)
-      | _exn -> Lwt.return (Owl_log.error "unknown error\n")
+    | Unix.Unix_error (_,_,_) -> heartbeat req id u_addr m_addr
+    | Omq_types.OMQ_Exception s -> Lwt.return (Owl_log.error "%s\n" s)
+    | _exn -> Lwt.return (Owl_log.error "unknown error\n")
   done;%lwt
   Omq_context.close_rep_socket _ztx rep;
   Omq_context.close_req_socket _ztx req;

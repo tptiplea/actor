@@ -1,5 +1,5 @@
 (** [ Barrier module ]
-  provides flexible synchronisation barrier controls.
+    provides flexible synchronisation barrier controls.
 *)
 
 open Actor_pure_types
@@ -21,11 +21,11 @@ let param_ssp _context =
     | false -> !_context.step
   in
   let l = Hashtbl.fold (fun w t' l ->
-    let busy = Hashtbl.find !_context.worker_busy w in
-    match (busy = 0) && ((t' - t) < !_context.stale) with
-    | true  -> l @ [ w ]
-    | false -> l
-  ) !_context.worker_step []
+      let busy = Hashtbl.find !_context.worker_busy w in
+      match (busy = 0) && ((t' - t) < !_context.stale) with
+      | true  -> l @ [ w ]
+      | false -> l
+    ) !_context.worker_step []
   in (t, l)
 
 (* Param barrier: Asynchronous parallel *)

@@ -1,5 +1,5 @@
 (** [ Service ]
-  defines basic functionality of services
+    defines basic functionality of services
 *)
 
 open Actor_pure_types
