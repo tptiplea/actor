@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ACTOR WORKER TEST</title>
+</head>
+<body>
+  <p>I AM WORKER</p>
+  <p id="actor_job_name">actor_pure_worker</p>
+  <script id="jquery" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script id="io_socket_library" src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+  <script id="comm_config" src="../../js/comm/comm_config.js"></script>
+  <script id="pcl_script" src="../../js/comm/peer_comm_layer.js"></script>
+  <script id="pcl_job_spawn_layer" src="../../js/comm/job_spawn_layer.js"></script>
+  <script id="actor_job_script" src="actor_pure_worker.js"></script>
+  <p>worker</p>
+<p>----------------</p>
+<pre id="logger" style="background-color:powderblue;"></pre>
+</body>
+</html>

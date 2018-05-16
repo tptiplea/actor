@@ -1,6 +1,6 @@
-let _jsl_jsapi_get_sysargs = Js.Unsafe.js_expr "pcl_jsapi_get_sysargs"
-let _jsl_jsapi_get_job_name = Js.Unsafe.js_expr "pcl_jsapi_get_job_name"
-let _jsl_jsapi_spawn_job_with_args = Js.Unsafe.js_expr "pcl_jsapi_spawn_job_with_args"
+let _jsl_jsapi_get_sysargs = Js.Unsafe.js_expr "jsl_jsapi_get_sysargs"
+let _jsl_jsapi_get_job_name = Js.Unsafe.js_expr "jsl_jsapi_get_job_name"
+let _jsl_jsapi_spawn_job_with_args = Js.Unsafe.js_expr "jsl_jsapi_spawn_job_with_args"
 
 let _unsafe_wrap_string s = Js.string s |> Js.Unsafe.inject
 
