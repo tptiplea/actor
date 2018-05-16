@@ -1,3 +1,5 @@
+let _exists_singleton_context = ref false
+
 type omq_context_t = {
   mutable sockets : Omq_socket.omq_socket_t list;
   mutable is_open : bool;
@@ -7,7 +9,17 @@ let _ensure_is_open ctx =
   if not ctx.is_open
   then raise (Omq_types.OMQ_Exception "ERROR: Operation on closed context")
 
-let create () = {sockets = []; is_open = true}
+let create signalling_server_url =
+  if (!_exists_singleton_context)
+  then (
+    let err_msg = "ERROR: There already is a request to create a context!!" in
+    Printf.printf "%s\n" err_msg;
+    raise (Omq_types.OMQ_Exception err_msg)
+  ) else (
+    _exists_singleton_context := true;
+    let%lwt my_id = Pcl_lwt.promise_start_comm_layer signalling_server_url in
+    Lwt.return (my_id, {sockets = []; is_open = true})
+  )
 
 let _internal_register_socket ctx sckt =
   _ensure_is_open ctx;

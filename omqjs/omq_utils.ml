@@ -1,8 +1,10 @@
 open Omq_types
 
+let resolve_promise resolver value = Lwt.wakeup_later resolver value
+
 (* Resolve a promise, if it is still pending *)
 let safe_resolve_promise resolver value =
-  try Lwt.wakeup_later resolver value; true
+  try resolve_promise resolver value; true
   with Invalid_argument _ -> false
 
 (* Reject a promise, if it is still pending *)
@@ -10,11 +12,16 @@ let safe_reject_promise resolver exc =
   try Lwt.wakeup_later_exn resolver exc; true
   with Invalid_argument _ -> false
 
-(* Timeout a promise, if it is still pending *)
-let add_mstimeout_to_promise timeout_ms resolver exc =
-  let timeout_sec = timeout_ms / 1000 in
-  let f = (fun () -> ignore (safe_reject_promise resolver exc)) in
-  Lwt_timeout.create timeout_sec f |> Lwt_timeout.start
+
+
+let add_on_mstimeout_callback_to_promise_then_exc timeout_ms promise
+    on_timeout_callback on_timeout_exc =
+  let timeout_sec = (float_of_int timeout_ms) /. 1000. in
+  let some_promise = Lwt.bind promise (fun res -> Lwt.return_some res) in
+  let timeout = Lwt.bind (Lwt_js.sleep timeout_sec) (fun () -> Lwt.return_none) in
+  match%lwt Lwt.choose [some_promise; timeout] with
+    Some res -> Lwt.return res (* the result was first *)
+  | None -> on_timeout_callback (); Lwt.fail on_timeout_exc
 
 let make_exn_fail_callback ?(context="") resolver =
   fun reason ->

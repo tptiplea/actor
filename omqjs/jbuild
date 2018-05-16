@@ -8,7 +8,7 @@
 
   (modes (byte))
   (preprocess (pps (lwt_ppx)))
-  (modules (:standard \ (test_pcl_bindings_server test_pcl_bindings_client)))
+  (modules (:standard \ (test_pcl_bindings_server test_pcl_bindings_client test_omq_server test_omq_client)))
   (libraries (
     js_of_ocaml
     js_of_ocaml-lwt
@@ -16,13 +16,13 @@
 ))))
 
 (executables
- ((public_names (test_pcl_bindings_server test_pcl_bindings_client))
-  (names        (test_pcl_bindings_server test_pcl_bindings_client))
+ ((public_names (test_pcl_bindings_server test_pcl_bindings_client test_omq_server test_omq_client))
+  (names        (test_pcl_bindings_server test_pcl_bindings_client test_omq_server test_omq_client))
   (package omqjs)
 
   (modes (byte))
   (preprocess (pps (lwt_ppx)))
-  (modules (test_pcl_bindings_server test_pcl_bindings_client))
+  (modules (test_pcl_bindings_server test_pcl_bindings_client test_omq_server test_omq_client))
   (libraries (
     omqjs
     lwt
