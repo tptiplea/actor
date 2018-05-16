@@ -147,8 +147,8 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
           let req = Omq_context.create_req_socket (_get_context()).ztx in
           let%lwt local = Omq_socket.connect_to_remote req (x |> Pcl_bindings.string_to_remote_sckt_t) in
           Owl_log.info "Connected to addrs (%s), listening on local (%s)\n" x (local |> Pcl_bindings.local_sckt_t_to_string);
-          let app = Filename.basename Sys.argv.(0) in (* TODO: if we get JS code, get this *)
-          let arg = Omq_utils.json_stringify Sys.argv in
+          let app = Jsl_bindings.jsl_get_job_name () in (* TODO: if we get JS code, get this *)
+          let arg = Omq_utils.json_stringify Jsl_bindings.jsl_get_sysargs in
           (Actor_pure_utils.send req Job_Create [|((_get_context()).myself_addr |> Pcl_bindings.local_sckt_t_to_string); app; arg|]);%lwt
           Lwt.return req
         ) addrs

@@ -20,16 +20,10 @@ let heartbeat req id u_addr m_addr =
   let%lwt _ = Omq_socket.recv_msg req in
   Lwt.return ()
 
-let start_app app _ =
+let start_app app arg =
   Owl_log.info "%s\n" ("starting job: " ^ app);
   Owl_log.error "Unsupported yet!!\n";
-  failwith "unimplemented start_app!!" (*
-  match fork () with
-  | 0 -> if fork () = 0 then Lwt.return (execv app arg) else Lwt.return (exit 0)
-  | _p -> let%lwt _ = wait () in Lwt.return ()
-*)
-
-let deploy_app _x = Lwt.return (Owl_log.error "%s\n" "error, cannot find app!")
+  Jsl_bindings.jsl_spawn_job_with_args app [|arg|]
 
 let run id u_addr m_addr =
   Owl_log.info "Started Actor WORKER, trying to connect to signalling server (%s)" Actor_pure_config.signalling_server_addr;
@@ -57,9 +51,7 @@ let run id u_addr m_addr =
           let arg = Omq_utils.json_parse m.par.(2) in
           Owl_log.info "%s\n" (app ^ " <- " ^ m.par.(0));
           Omq_socket.send_msg rep (Omq_utils.json_stringify OK |> Omq_socket.string_to_omq_msg_t);%lwt
-          match Sys.file_exists app with
-          | true ->  start_app app arg
-          | false -> deploy_app app
+          Lwt.return (start_app app arg)
         )
       | _ -> Lwt.return ()
     with

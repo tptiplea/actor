@@ -30,7 +30,7 @@ let test_neural_parallel () =
       ~checkpoint:(Checkpoint.None) ~stopping:(Stopping.Const 1e-6) 10.
   in
   let url = Actor_pure_config.manager_addr in
-  let jid = Sys.argv.(1) in
+  let jid = (Jsl_bindings.jsl_get_sysargs ()).(1) in
   M2.train ~params nn x y jid url
 
 let _ = test_neural_parallel ()
