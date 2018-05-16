@@ -8,20 +8,30 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
   type vars_t = (key_t * value_t) list
 
   (* the global context: master, worker, etc. *)
-  let _context = ref (Actor_pure_utils.empty_param_context ())
+  let _context = ref None
+  let _get_context () =
+    match !_context with
+      None -> failwith "Paramclient is not initialised!!"
+    | Some ctx -> ctx
 
-  let _get (k : key_t) =
-    let k' = Marshal.to_string k [] in
-    let%lwt _ = Actor_pure_utils.send ~bar:!_context.step !_context.master_sock PS_Get [|k'|] in
-    let%lwt m = (Actor_pure_zmq_repl.recv !_context.master_sock) in
+  let _get : key_t -> (value_t * int) Lwt.t = function k ->
+  match !_context with
+    None -> failwith "Paramclient is not initialised!!"
+  | Some ctx ->
+    let k' = Omq_utils.json_stringify k in
+    let%lwt _ = Actor_pure_utils.send ~bar:ctx.step ctx.master_sock PS_Get [|k'|] in
+    let%lwt m = (Omq_socket.recv_msg ctx.master_sock) in
     let m = of_msg m in
-    Lwt.return (Marshal.from_string m.par.(0) 0, m.bar)
+    Lwt.return (Omq_utils.json_parse m.par.(0), m.bar)
 
 
   let _set (k : key_t) (v : value_t) (t : int) =
-    let k' = Marshal.to_string k [] in
-    let v' = Marshal.to_string v [] in
-    Actor_pure_utils.send ~bar:t !_context.master_sock PS_Set [|k'; v'|]
+  match !_context with
+    None -> failwith "Paramclient is not initialised!!"
+  | Some ctx ->
+    let k' = Omq_utils.json_stringify k in
+    let v' = Omq_utils.json_stringify v in
+    Actor_pure_utils.send ~bar:t ctx.master_sock PS_Set [|k'; v'|]
 
 
   (* default push function *)
@@ -31,48 +41,55 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
   let update_push_fun f = _push := f
 
   let update_param (x : vars_t) (t : int) =
+  match !_context with
+    None -> failwith "Paramclient is not initialised!!"
+  | Some ctx ->
     (* update multiple kvs, more efficient than set *)
-    let x' = Marshal.to_string x [] in
-    Actor_pure_utils.send ~bar:t !_context.master_sock PS_Push [|x'|]
+    let x' = Omq_utils.json_stringify x in
+    Actor_pure_utils.send ~bar:t ctx.master_sock PS_Push [|x'|]
 
   let service_loop () =
-    Owl_log.debug "parameter worker @ %s\n" !_context.myself_addr;
-    (* unmarshal the push function *)
+  match !_context with
+    None -> failwith "Paramclient is not initialised!!"
+  | Some ctx ->
+    Owl_log.debug "parameter worker @ %s\n" (ctx.myself_addr |> Pcl_bindings.local_sckt_t_to_string);
+    (* unmarshal the push function *) (* note, marshalling removed *)
     let push : string -> vars_t -> vars_t = !_push in
     (* loop to process messages *)
     try%lwt while%lwt true do
-      let%lwt _i, m = Actor_pure_utils.recv !_context.myself_sock in
+      let%lwt _i, m = Actor_pure_utils.recv_with_id ctx.myself_sock in
       let t = m.bar in
       match m.typ with
       | PS_Schedule -> (
-        Owl_log.debug "%s: ps_schedule\n" !_context.myself_addr;
-        !_context.step <- (if t > !_context.step then t else !_context.step);
-        let vars = Marshal.from_string m.par.(0) 0 in
-        let updates = push !_context.myself_addr vars in
+          Owl_log.debug "%s: ps_schedule\n" (ctx.myself_addr |> Pcl_bindings.local_sckt_t_to_string);
+        ctx.step <- (if t > ctx.step then t else ctx.step);
+        let vars : vars_t = Omq_utils.json_parse m.par.(0) in
+        let updates = push (ctx.myself_addr |> Pcl_bindings.local_sckt_t_to_string) vars in
         update_param updates t
         )
-        | Terminate -> (
-          Owl_log.debug "%s: terminate\n" !_context.myself_addr;
-          Actor_pure_utils.send ~bar:t !_context.master_sock OK [||];%lwt
-          Lwt_unix.sleep 1.0;%lwt (* FIXME: sleep ... *)
-          Lwt.return (failwith ("#" ^ !_context.job_id ^ " terminated"))
+      | Terminate -> (
+          Owl_log.debug "%s: terminate\n" (ctx.myself_addr |> Pcl_bindings.local_sckt_t_to_string);
+          Actor_pure_utils.send ~bar:t ctx.master_sock OK [||];%lwt
+          Lwt_js.sleep 1.0;%lwt (* FIXME: sleep ... *)
+          Lwt.return (failwith ("#" ^ ctx.job_id ^ " terminated"))
           )
         | _ -> Lwt.return ( Owl_log.debug "unknown mssage to PS\n" )
-    done with Failure e -> Lwt.return (
-      Owl_log.warn "%s\n" e;
-      Actor_pure_zmq_repl.close !_context.myself_sock;
+    done with Failure e -> (
+        Owl_log.warn "%s\n" e;
+      Omq_context.close_router_socket ctx.ztx ctx.myself_sock;
       Pervasives.exit 0 )
 
   let init m context =
-    _context := context;
-    !_context.master_addr <- m.par.(0);
+    context.master_addr <- m.par.(0) |> Pcl_bindings.string_to_remote_sckt_t;
     (* connect to job master *)
-    let master = Actor_pure_zmq_repl.create !_context.ztx Actor_pure_zmq_repl.dealer in
-    Actor_pure_zmq_repl.set_send_high_water_mark master Actor_pure_config.high_warter_mark;
-    Actor_pure_zmq_repl.set_identity master !_context.myself_addr;
-    Actor_pure_zmq_repl.connect master !_context.master_addr;%lwt
-    Actor_pure_utils.send master OK [|!_context.myself_addr|];%lwt
-    !_context.master_sock <- master;
+    let master = Omq_context.create_dealer_socket context.ztx in
+    Omq_socket.set_send_high_water_mark master Actor_pure_config.high_water_mark;
+    Omq_socket.set_identity master (context.myself_addr |> Pcl_bindings.local_sckt_t_to_string |> Omq_socket.string_to_omq_socket_id_t);
+    let%lwt local = Omq_socket.connect_to_remote master context.master_addr in
+    Owl_log.info "Successfully connected to master with local address (%s)\n" (local |> Pcl_bindings.local_sckt_t_to_string);
+    Actor_pure_utils.send master OK [|context.myself_addr |> Pcl_bindings.local_sckt_t_to_string|];%lwt
+    context.master_sock <- master;
+    _context := Some context;
     (* enter into worker service loop *)
     service_loop ()
 end

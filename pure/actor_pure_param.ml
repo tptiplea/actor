@@ -24,26 +24,24 @@ let start ?barrier jid url =
   in
   MyServer.update_barrier_fun _barrier_str;
   (* start preparing communication context *)
-  let _ztx = Actor_pure_zmq_repl.context_create () in
+  let%lwt (unique_id, _ztx) = Omq_context.create Actor_pure_config.signalling_server_addr in
+  Owl_log.info "PARAM.ML: Successfully connected to signalling server with id (%s) and create OMQ Context" unique_id;
   let%lwt _addr, _router = Actor_pure_utils.bind_available_addr _ztx in
-  let req = Actor_pure_zmq_repl.create _ztx Actor_pure_zmq_repl.req in
-  Actor_pure_zmq_repl.connect req url;%lwt
-  Actor_pure_utils.send req Job_Reg [|_addr; jid|];%lwt
+  let req = Omq_context.create_req_socket _ztx in
+  let%lwt local = Omq_socket.connect_to_remote req (url |> Pcl_bindings.string_to_remote_sckt_t) in
+  Owl_log.info "Successfully connected to remote (%s) with local address (%s)\n" url (local |> Pcl_bindings.local_sckt_t_to_string);
+  Actor_pure_utils.send req Job_Reg [|_addr |> Pcl_bindings.local_sckt_t_to_string; jid|];%lwt
   (* create and initialise part of the context *)
-  let _context = Actor_pure_utils.empty_param_context () in
-  _context.job_id <- jid;
-  _context.myself_addr <- _addr;
-  _context.myself_sock <- _router;
-  _context.ztx <- _ztx;
+  let _context = Actor_pure_utils.create_param_context _ztx jid _addr _router in
   (* depends on the role, start server or client *)
-  let%lwt m_pack = (Actor_pure_zmq_repl.recv req) in
+  let%lwt m_pack = (Omq_socket.recv_msg req) in
   let m = of_msg m_pack in
   let%lwt _ = match m.typ with
     | Job_Master -> MyServer.init m _context
     | Job_Worker -> MyClient.init m _context
     | _ -> Lwt.return (Owl_log.info "%s\n" "unknown command")
   in
-  Lwt.return (Actor_pure_zmq_repl.close req)
+  Lwt.return (Omq_context.close_req_socket _context.ztx req)
 
 let register_barrier (f) =
   MyServer.update_barrier_fun f
@@ -61,20 +59,20 @@ let register_stop f =
   MyServer.update_stop_fun f
 
 let get k =
-  match MyServer.(!_context.job_id) = "" with
+  match (MyServer._get_context()).job_id = "" with
   | true  -> MyClient._get k
   | false -> Lwt.return (MyServer._get k)
 
 let set k v =
-  match MyServer.(!_context.job_id) = "" with
-  | true  -> MyClient.(_set k v !_context.step)
-  | false -> Lwt.return (MyServer.(_set k v !_context.step))
+  match (MyServer._get_context()).job_id = "" with
+  | true  -> MyClient.(_set k v (_get_context()).step)
+  | false -> Lwt.return (MyServer.(_set k v (_get_context()).step))
 
 let keys () = Hashtbl.fold (fun k _v l -> l @ [ Obj.obj k ]) MyServer._param []
 
 let worker_num () =
-  match MyServer.(!_context.job_id) = "" with
+  match MyServer.((_get_context()).job_id) = "" with
   | true  -> failwith "Actor_pure_param:worker_num"
-  | false -> StrMap.cardinal MyServer.(!_context.workers)
+  | false -> StrMap.cardinal MyServer.((_get_context()).workers)
 
 end

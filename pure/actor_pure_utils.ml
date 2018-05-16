@@ -1,35 +1,34 @@
 (** Some shared helper functions *)
-
 open Actor_pure_types
 
 (* Used in lib/actor_paramclient *)
 (* Used in lib/actor_paramserver *)
-let recv s =
-  let%lwt m = Actor_pure_zmq_repl.recv_all s in
-  Lwt.return (List.nth m 0, List.nth m 1 |> of_msg)
+let recv_with_id sckt =
+  let%lwt (id, msg) = Omq_socket.recv_msg_with_id sckt in
+  Lwt.return (id, msg |> Actor_pure_types.of_msg)
 
 (* Used in src/actor_manager *)
 (* Used in src/actor_worker *)
 (* Used in lib/actor_param *)
 (* Used in lib/actor_paramclient *)
 (* Used in lib/actor_paramserver *)
-let send ?(bar=0) v t s =
-  try%lwt Actor_pure_zmq_repl.send ~block:false v (to_msg bar t s)
-  with _exn -> let hwm = Actor_pure_zmq_repl.get_send_high_water_mark v in
+let send ?(bar=0) sckt msg_typ par =
+  try%lwt Omq_socket.send_msg ~block:false sckt (Actor_pure_types.to_msg bar msg_typ par)
+  with _exn -> let hwm = Omq_socket.get_send_high_water_mark sckt in
   Owl_log.error "fail to send bar:%i hwm:%i\n" bar hwm;
   Lwt.return ()
 
 let rec _bind_available_addr addr sock ztx =
-  addr := "tcp://127.0.0.1:" ^ (string_of_int (Random.int 10000 + 50000));
-  try%lwt Actor_pure_zmq_repl.bind sock !addr
+  addr := "tcp://127.0.0.1:" ^ (Pcl_bindings.pcl_util_rand_str 10) |> Pcl_bindings.string_to_local_sckt_t;
+  try%lwt Omq_socket.bind_local sock !addr
   with _exn -> _bind_available_addr addr sock ztx
 
 (* Used in lib/actor_param *)
 let bind_available_addr ztx =
-  let router : Actor_pure_zmq_repl.socket_router_t = Actor_pure_zmq_repl.create ztx Actor_pure_zmq_repl.router in
-  let addr = ref "" in
+  let router = Omq_context.create_router_socket ztx in
+  let addr = ref ("" |> Pcl_bindings.string_to_local_sckt_t) in
   let%lwt _ = _bind_available_addr addr router ztx in
-  Actor_pure_zmq_repl.set_receive_high_water_mark router Actor_pure_config.high_warter_mark;
+  Omq_socket.set_recv_high_water_mark router Actor_pure_config.high_water_mark;
   Lwt.return (!addr, router)
 
 (* the following 3 functions are for shuffle operations *)
@@ -57,15 +56,13 @@ let choose_load x n i = List.filter (fun (k,_l) -> (Hashtbl.hash k mod n) = i) x
 (* Used in lib/actor_param *)
 (* Used in lib/actor_paramclient *)
 (* Used in lib/actor_paramserver *)
-let empty_param_context () =
-  let ztx = Actor_pure_zmq_repl.context_create () in
-  {
+let create_param_context ztx job_id myself_addr myself_sock = {
     ztx         = ztx;
-    job_id      = "";
-    master_addr = "";
-    myself_addr = "";
-    master_sock = Actor_pure_zmq_repl.(create ztx dealer);
-    myself_sock = Actor_pure_zmq_repl.(create ztx router);
+    job_id      = job_id;
+    master_addr = "" |> Pcl_bindings.string_to_remote_sckt_t;
+    myself_addr = myself_addr;
+    master_sock = Omq_context.create_dealer_socket ztx;
+    myself_sock = myself_sock;
     workers     = StrMap.empty;
     step        = 0;
     stale       = 1;

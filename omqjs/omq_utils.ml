@@ -42,3 +42,9 @@ let trim_queue_prefix p q =
   while (not (Queue.is_empty q)) && (p (Queue.peek q)) do
     ignore (Queue.pop q)
   done
+
+let json_stringify obj =
+  Json.output obj |> Js.to_string
+
+let json_parse str =
+  str |> Js.string |> Json.unsafe_input

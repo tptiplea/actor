@@ -22,9 +22,8 @@
   (preprocess (pps (lwt_ppx)))
 
   (libraries (
-    zmq
+    omqjs
     lwt
-    lwt.unix
     owl-base
    )
 )))
@@ -39,6 +38,6 @@
   (modules (actor_pure_manager actor_pure_worker test_pure_parameter test_pure_owl_parallel))
   (libraries (
     actor_pure
+    omqjs
     lwt
-    lwt.unix
 ))))

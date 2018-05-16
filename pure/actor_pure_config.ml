@@ -1,5 +1,8 @@
 (** [ Config ] contains the static configurations of the framework. *)
 
+(** the signalling server address *)
+let signalling_server_addr = "http://localhost:3000"
+
 (** Manager's address, all workders connect to this address *)
 let manager_addr = "tcp://127.0.0.1:5555"
 
@@ -17,7 +20,7 @@ let _ =  Actor_logger.update_config level logdir ""
 *)
 
 (** Max queue length of ZMQ send and receive *)
-let high_warter_mark = 10_000
+let high_water_mark = 10_000
 
 (** WebHDFS base addr and port *)
 let webhdfs_addr = "192.168.99.100:50070"

@@ -24,4 +24,4 @@ let test_context () =
   PS.start Sys.argv.(1) Actor_pure_config.manager_addr;%lwt
   Lwt.return (Owl_log.info "do some work at master node\n")
 
-let _ = Lwt_main.run (test_context ())
+let _ = test_context ()

@@ -36,13 +36,13 @@ type message_rec = {
 }
 
 type param_context = {
-  mutable ztx         : Actor_pure_zmq_repl.context_t;                    (* zmq context for communication *)
-  mutable job_id      : string;                           (* job id or swarm id, depends on paradigm *)
-  mutable master_addr : string;                           (* different meaning in different paradigm *)
-  mutable myself_addr : string;                           (* communication address of current process *)
-  mutable master_sock : Actor_pure_zmq_repl.socket_dealer_t;           (* socket of master_addr *)
-  mutable myself_sock : Actor_pure_zmq_repl.socket_router_t;           (* socket of myself_addr *)
-  mutable workers     : Actor_pure_zmq_repl.socket_dealer_t StrMap.t;  (* socket of workers or peers *)
+          ztx         : Omq_context.omq_context_t;                    (* zmq context for communication *)
+          job_id      : string;                           (* job id or swarm id, depends on paradigm *)
+  mutable master_addr : Pcl_bindings.remote_sckt_t;                           (* different meaning in different paradigm *)
+          myself_addr : Pcl_bindings.local_sckt_t;                           (* communication address of current process *)
+  mutable master_sock : [`DEALER] Omq_socket.omq_socket_t;           (* socket of master_addr *)
+          myself_sock : [`ROUTER] Omq_socket.omq_socket_t;           (* socket of myself_addr *)
+  mutable workers     : [`DEALER] Omq_socket.omq_socket_t StrMap.t;  (* socket of workers or peers *)
   mutable step        : int;                              (* local step for barrier control *)
   mutable stale       : int;                              (* staleness variable for barrier control *)
   mutable worker_busy : (string, int) Hashtbl.t;          (* lookup table of a worker busy or not *)
@@ -71,10 +71,11 @@ type service_rec = {
 
 let to_msg b t p =
   let m = { bar = b; typ = t; par = p } in
-  Marshal.to_string m [ ]
+  m |> Omq_utils.json_stringify |> Omq_socket.string_to_omq_msg_t
 
-let of_msg s =
-  let m : message_rec = Marshal.from_string s 0 in m;;
+(* NOTE: Removed marshall from these two ,replaced with JSON *)
+let of_msg msg =
+  let m : message_rec = msg |> Omq_socket.omq_msg_t_to_string |> Omq_utils.json_parse in m;;
 
 (* initialise some states *)
 

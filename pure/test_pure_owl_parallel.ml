@@ -33,4 +33,4 @@ let test_neural_parallel () =
   let jid = Sys.argv.(1) in
   M2.train ~params nn x y jid url
 
-let _ = Lwt_main.run (test_neural_parallel ())
+let _ = test_neural_parallel ()

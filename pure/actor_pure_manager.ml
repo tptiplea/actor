@@ -20,7 +20,7 @@ module Workers = struct
   let addrs () = StrMap.fold (fun _k v l -> l @ [v.addr]) !_workers []
 end
 
-let addr = Actor_pure_config.manager_addr
+let addr = Actor_pure_config.manager_addr |> Pcl_bindings.string_to_local_sckt_t
 let myid = Actor_pure_config.manager_id
 
 let process r m =
@@ -37,7 +37,7 @@ let process r m =
     if Actor_pure_service.mem jid = false then (
       Actor_pure_service.add jid master;
       (* FIXME: currently send back all nodes as workers *)
-      let addrs = Marshal.to_string (Workers.addrs ()) [] in
+      let addrs = Omq_utils.json_stringify (Workers.addrs ()) in
       Actor_pure_utils.send r Job_Master [|addrs|] )
     else
       let master = (Actor_pure_service.find jid).master in
@@ -53,23 +53,26 @@ let process r m =
     Owl_log.info "p2p @ %s job:%s\n" addr jid;
     if Actor_pure_service.mem jid = false then Actor_pure_service.add jid "";
     let peers = Actor_pure_service.choose_workers jid 10 in
-    let peers = Marshal.to_string peers [] in
+    let peers = Omq_utils.json_stringify peers in
     Actor_pure_service.add_worker jid addr;
     Actor_pure_utils.send r OK [|peers|]
     )
   | _ -> Lwt.return (Owl_log.error "unknown message type\n")
 
 let run _id addr =
-  let _ztx = Actor_pure_zmq_repl.context_create () in
-  let rep = Actor_pure_zmq_repl.create _ztx Actor_pure_zmq_repl.rep in
-  Actor_pure_zmq_repl.bind rep addr;%lwt
+  Owl_log.info "Started Actor MANAGER, trying to connect to signalling server (%s)" Actor_pure_config.signalling_server_addr;
+  let%lwt unique_id, _ztx = Omq_context.create Actor_pure_config.signalling_server_addr in
+  Owl_log.info "ACTOR MANAGER: connected to signalling_server_addr, got unique id (%s)" unique_id;
+  let rep = Omq_context.create_rep_socket _ztx in
+  Owl_log.info "ACTOR MANAGER: About to bind addr (%s)" (addr |> Pcl_bindings.local_sckt_t_to_string);
+  Omq_socket.bind_local rep addr;%lwt
   while%lwt true do
-    let%lwt m_pack = (Actor_pure_zmq_repl.recv rep) in
+    let%lwt m_pack = (Omq_socket.recv_msg rep) in
     let m = of_msg m_pack in
     process rep m
   done;%lwt
-  Actor_pure_zmq_repl.close rep;
-  Actor_pure_zmq_repl.context_terminate _ztx;
+  Omq_context.close_rep_socket _ztx rep;
+  Omq_context.terminate _ztx;
   Lwt.return ()
 
 let install_app _x = None
