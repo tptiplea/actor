@@ -703,7 +703,7 @@ function log_warning(warning) {
 
 // -------------------------------------------------------------- ******* TEST ******* //
 function __pcljs_test() {
-    start_pcl_layer(SIGNALLING_SERVER_URL);
+    start_pcl_layer("http://localhost:3000");
     var MY_SOCKET_ID = "peer_one_baby";
     var OTHER_SOCKET_ID = "peer_two_yeah";
     var MY_MESSAGE = "!!!HEY I AM PEER ONE 222211111112";

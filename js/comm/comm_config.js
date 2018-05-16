@@ -9,5 +9,3 @@ const WEBRTC_CONFIGURATION = {
     "iceTransportPolicy": "all",
     "iceCandidatePoolSize": "0"
 };
-
-const SIGNALLING_SERVER_URL = "http://localhost:3000";  // TODO: add the server URL here

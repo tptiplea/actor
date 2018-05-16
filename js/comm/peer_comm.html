@@ -5,24 +5,14 @@
     <title>Peer comm</title>
 </head>
 <body>
-<script>
-    !function (o) {
-        console.old = console.log;
-        console.log = function () {
-            var n, e, t = '<p style=\"font-family:courier;font-size:70%;background-color:powderblue;\">';
-            for (e = 0; e < arguments.length; e++)
-                t += '<span class="log-' + typeof(n = arguments[e]) + '">', "object" == typeof n && "object" == typeof JSON && "function" == typeof JSON.stringify ? t += JSON.stringify(n) : t += n, t += "</span>&nbsp;";
-            o.innerHTML += t + "</p>";
-            console.old.apply(void 0, arguments)
-        }
-    }
-    (document.body);
-</script>
-<script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
-<script src="comm_config.js"></script>
-<script src="peer_comm_layer.js"></script>
-<p>Console output:</p>
+<p id="actor_job_name">tester</p>
+<script id="jquery" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script id="io_socket_library" src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+<script id="comm_config" src="comm_config.js"></script>
+<script id="pcl_script" src="peer_comm_layer.js"></script>
+<script id="pcl_job_spawn_layer" src="job_spawn_layer.js"></script>
+<script id="actor_job_script" src="tester.js"></script>
+<p>Test PCL</p>
 <p>----------------</p>
-<pre id="logger" style="background-color:powderblue;"></pre>
 </body>
 </html>
