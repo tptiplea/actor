@@ -35,7 +35,12 @@ function jsl_jsapi_get_job_name() {
     }
 }
 
+// Spawns the app with the given job name. NOTE: args will contain in [0] the jobname, which will be stripped.
 function jsl_jsapi_spawn_job_with_args(job_name, args) {
+    console.debug("\n\nRequested jsapi with args", args);
+    var args = args.slice(1);
+    console.debug("will pass:", args);
+
     var args = encodeURIComponent(JSON.stringify(args));
 
     var new_pathname = window.location.pathname.split('/').slice(0, -1).join("/");

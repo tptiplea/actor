@@ -1,5 +1,8 @@
 (** [ Config ] contains the static configurations of the framework. *)
 
+let _ = Owl_log.set_output Pervasives.stdout, Owl_log.set_level Owl_log.DEBUG
+let _ = Owl_log.debug "logging set at debug lvl"
+
 (** the signalling server address *)
 let signalling_server_addr = "http://localhost:3000"
 

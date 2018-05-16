@@ -146,24 +146,33 @@ module Internal (KeyValueTypeSpecifier : KeyValueTypeSig) = struct
       List.map (fun x ->
           let req = Omq_context.create_req_socket (_get_context()).ztx in
           let%lwt local = Omq_socket.connect_to_remote req (x |> Pcl_bindings.string_to_remote_sckt_t) in
-          Owl_log.info "Connected to addrs (%s), listening on local (%s)\n" x (local |> Pcl_bindings.local_sckt_t_to_string);
+          Owl_log.debug "Connected to addrs (%s), listening on local (%s)\n" x (local |> Pcl_bindings.local_sckt_t_to_string);
           let app = Jsl_bindings.jsl_get_job_name () in (* TODO: if we get JS code, get this *)
-          let arg = Omq_utils.json_stringify Jsl_bindings.jsl_get_sysargs in
-          (Actor_pure_utils.send req Job_Create [|((_get_context()).myself_addr |> Pcl_bindings.local_sckt_t_to_string); app; arg|]);%lwt
+          Owl_log.debug "paramserv: the jobname sent to master is %s" app;
+          let args = Jsl_bindings.jsl_get_sysargs () in
+          let _ = Array.iter (fun a -> Owl_log.debug "paramserv: param: %s" a) args in
+          let arg_str = Omq_utils.json_stringify (Jsl_bindings.jsl_get_sysargs ()) in (* NOTE string array as a string *)
+          Owl_log.debug "paramserv: sending with the sysargs %s" arg_str;
+          Owl_log.debug "paramserv: serving Job_Create to master";
+          (Actor_pure_utils.send req Job_Create [|((_get_context()).myself_addr |> Pcl_bindings.local_sckt_t_to_string); app; arg_str|]);%lwt
           Lwt.return req
         ) addrs
     in
+    Owl_log.debug "paramserv: closing sockets 157";
     let _close_sockets_threads = List.map
         (fun sp -> let%lwt s = sp in Lwt.return (Omq_context.close_req_socket (_get_context()).ztx s))
         sockets_promises in
     let%lwt _ = Lwt.join _close_sockets_threads in
+    Owl_log.debug "paramserv: closed all sockets";
     (* wait until all the allocated actors register *)
     while%lwt (StrMap.cardinal (_get_context()).workers) < (List.length addrs) do
+      Owl_log.debug "paramserv: waiting to recv message on myself";
       let%lwt _i, m = Actor_pure_utils.recv_with_id (_get_context()).myself_sock in
       let s = Omq_context.create_dealer_socket (_get_context()).ztx in
+      Owl_log.debug "paramserv: creating dealer socket for ctx";
       Omq_socket.set_send_high_water_mark s Actor_pure_config.high_water_mark;
       let%lwt local = Omq_socket.connect_to_remote s (m.par.(0) |> Pcl_bindings.string_to_remote_sckt_t) in
-      Owl_log.info "paramserv: Connected to addrs (%s), listening on local (%s)\n" m.par.(0) (local |> Pcl_bindings.local_sckt_t_to_string);
+      Owl_log.debug "paramserv: Connected to addrs (%s), listening on local (%s)\n" m.par.(0) (local |> Pcl_bindings.local_sckt_t_to_string);
       (_get_context()).workers <- (StrMap.add m.par.(0) s (_get_context()).workers);
       Lwt.return ()
     done;%lwt
